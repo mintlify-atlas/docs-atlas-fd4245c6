@@ -1,0 +1,139 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "OpenShift Python Wrapper",
+  "projectDescription": "A Python wrapper for the Kubernetes client with support for OpenShift and Container Virtualization",
+  "theme": "aspen",
+  "primaryColor": "#fbd342",
+  "lightColor": "#3b73a4",
+  "darkColor": "#e4e3de",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "core-concepts/resources",
+              "core-concepts/namespaced-resources",
+              "core-concepts/context-managers",
+              "core-concepts/client-configuration"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/working-with-pods",
+              "guides/working-with-deployments",
+              "guides/resource-crud-operations",
+              "guides/virtual-machines",
+              "guides/logging-configuration",
+              "guides/proxy-configuration"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/class-generator",
+              "advanced/fake-client",
+              "advanced/mcp-server",
+              "advanced/testing"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Resources",
+            "pages": [
+              "api-reference/resource",
+              "api-reference/namespaced-resource",
+              "api-reference/pod",
+              "api-reference/deployment",
+              "api-reference/service",
+              "api-reference/configmap",
+              "api-reference/secret"
+            ]
+          },
+          {
+            "group": "OpenShift Resources",
+            "pages": [
+              "api-reference/openshift/route",
+              "api-reference/openshift/build-config",
+              "api-reference/openshift/deployment-config",
+              "api-reference/openshift/image-stream"
+            ]
+          },
+          {
+            "group": "Virtualization",
+            "pages": [
+              "api-reference/virtualization/virtual-machine",
+              "api-reference/virtualization/data-volume",
+              "api-reference/virtualization/kubevirt"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api-reference/utilities/client",
+              "api-reference/utilities/exceptions",
+              "api-reference/utilities/constants"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Contributing",
+        "groups": [
+          {
+            "group": "Development",
+            "pages": [
+              "contributing/overview",
+              "contributing/adding-resources",
+              "contributing/testing",
+              "contributing/releasing"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Unified CRUD interface for Kubernetes and OpenShift resources",
+    "Support for OpenShift Container Virtualization (KubeVirt)",
+    "Context managers for automatic resource lifecycle management",
+    "Resource-specific functionality like pod exec and logs",
+    "Class generator for automatic resource wrapper creation",
+    "Fake Kubernetes client for testing without a cluster",
+    "MCP (Model Context Protocol) server integration",
+    "Type hints and comprehensive documentation",
+    "Pytest fixtures for setup and teardown"
+  ],
+  "publicApiSurface": [
+    "Resource",
+    "NamespacedResource",
+    "Pod",
+    "Deployment",
+    "Service",
+    "ConfigMap",
+    "Secret",
+    "VirtualMachine",
+    "DataVolume",
+    "Route",
+    "BuildConfig",
+    "get_client",
+    "FakeDynamicClient",
+    "class-generator CLI",
+    "openshift-mcp-server CLI"
+  ]
+}
