@@ -3,9 +3,20 @@ title: 'BuildConfig'
 description: 'OpenShift BuildConfig resource for defining build strategies'
 ---
 
+<Warning>
+  **This resource wrapper does not currently exist in the openshift-python-wrapper library.** 
+  
+  You can use the class generator to create this wrapper for your cluster:
+  ```bash
+  class-generator --kind BuildConfig
+  ```
+  
+  Or work with BuildConfig resources using the generic Resource class with `kind="BuildConfig"` and `api_group="build.openshift.io"`.
+</Warning>
+
 ## Overview
 
-The `BuildConfig` class represents an OpenShift BuildConfig object, which defines a build strategy for creating container images. BuildConfigs are OpenShift-specific resources that automate the process of building container images from source code using various build strategies (Source-to-Image, Docker, Custom, or Pipeline).
+BuildConfig is an OpenShift object that defines a build strategy for creating container images. BuildConfigs automate the process of building container images from source code using various build strategies (Source-to-Image, Docker, Custom, or Pipeline).
 
 **API Group:** `build.openshift.io/v1`
 

@@ -3,14 +3,25 @@ title: 'DeploymentConfig'
 description: 'OpenShift DeploymentConfig resource for managing application deployments'
 ---
 
+<Warning>
+  **This resource wrapper does not currently exist in the openshift-python-wrapper library.** 
+  
+  You can use the class generator to create this wrapper for your cluster:
+  ```bash
+  class-generator --kind DeploymentConfig
+  ```
+  
+  Or work with DeploymentConfig resources using the generic Resource class with `kind="DeploymentConfig"` and `api_group="apps.openshift.io"`.
+</Warning>
+
 ## Overview
 
-The `DeploymentConfig` class represents an OpenShift DeploymentConfig object, which defines the template for a pod and manages deploying new images or configuration changes. DeploymentConfigs are OpenShift-specific resources that provide more advanced deployment strategies and triggers compared to standard Kubernetes Deployments.
+DeploymentConfig is an OpenShift-specific resource that defines the template for a pod and manages deploying new images or configuration changes. DeploymentConfigs provide more advanced deployment strategies and triggers compared to standard Kubernetes Deployments.
 
 **API Group:** `apps.openshift.io/v1`
 
 <Note>
-  DeploymentConfig is an OpenShift-specific resource. While still supported, OpenShift recommends using standard Kubernetes Deployments for new applications. DeploymentConfigs are maintained for backward compatibility and specific OpenShift features.
+  While still supported, OpenShift recommends using standard Kubernetes Deployments for new applications. DeploymentConfigs are maintained for backward compatibility and specific OpenShift features.
 </Note>
 
 ## Class Definition
