@@ -1,0 +1,385 @@
+---
+title: 'DataVolume'
+description: 'DataVolume resource for managing persistent storage for KubeVirt virtual machines'
+icon: 'database'
+---
+
+## Overview
+
+The `DataVolume` class provides a declarative way to create and manage persistent volumes for virtual machines. It handles data import from various sources including HTTP, container registries, PVCs, and supports direct upload and blank disk creation.
+
+## Class Definition
+
+```python
+from ocp_resources.datavolume import DataVolume
+
+class DataVolume(NamespacedResource):
+    api_group = NamespacedResource.ApiGroup.CDI_KUBEVIRT_IO
+```
+
+## Constructor
+
+<ParamField path="source" type="string" deprecated>
+  Source type for the DataVolume: `"upload"`, `"http"`, `"pvc"`, `"registry"`, or `"blank"`. Use `source_dict` instead.
+</ParamField>
+
+<ParamField path="source_dict" type="dict">
+  Dictionary defining the DataVolume source configuration. This is the recommended way to specify sources.
+</ParamField>
+
+<ParamField path="size" type="string">
+  DataVolume size in Kubernetes resource format (e.g., `"5Gi"`, `"100Mi"`).
+</ParamField>
+
+<ParamField path="storage_class" type="string">
+  Name of the StorageClass to use for the DataVolume.
+</ParamField>
+
+<ParamField path="url" type="string">
+  URL for importing data when source is `"http"` or `"registry"`.
+</ParamField>
+
+<ParamField path="content_type" type="string">
+  Content type of the data: `"kubevirt"` or `"archive"`.
+</ParamField>
+
+<ParamField path="access_modes" type="string">
+  Access mode for the volume: `"ReadWriteOnce"` (RWO), `"ReadOnlyMany"` (ROX), or `"ReadWriteMany"` (RWX).
+</ParamField>
+
+<ParamField path="volume_mode" type="string">
+  Volume mode: `"Filesystem"` or `"Block"`.
+</ParamField>
+
+<ParamField path="cert_configmap" type="string">
+  Name of ConfigMap containing TLS certificates for HTTPS sources.
+</ParamField>
+
+<ParamField path="secret" type="Secret">
+  Secret object containing authentication credentials for the source.
+</ParamField>
+
+<ParamField path="hostpath_node" type="string">
+  Node name to provision the DataVolume on (for hostPath storage).
+</ParamField>
+
+<ParamField path="source_pvc" type="string">
+  Name of the source PVC when cloning from an existing PVC.
+</ParamField>
+
+<ParamField path="source_namespace" type="string">
+  Namespace of the source PVC when cloning.
+</ParamField>
+
+<ParamField path="source_ref" type="dict">
+  Indirect reference to a data source. Fields: `kind` (e.g., `"DataSource"`), `name`, `namespace`.
+</ParamField>
+
+<ParamField path="multus_annotation" type="string">
+  Network attachment definition name for Multus networking.
+</ParamField>
+
+<ParamField path="bind_immediate_annotation" type="boolean">
+  Request immediate binding even when StorageClass uses `WaitForFirstConsumer`.
+</ParamField>
+
+<ParamField path="preallocation" type="boolean">
+  Enable disk space preallocation for better performance.
+</ParamField>
+
+<ParamField path="api_name" type="string" default="pvc">
+  API to use for DataVolume: `"pvc"` or `"storage"`. Default will change to `"storage"` in future releases.
+</ParamField>
+
+<ParamField path="checkpoints" type="list">
+  List of DataVolumeCheckpoints for incremental snapshot operations.
+</ParamField>
+
+<ParamField path="final_checkpoint" type="boolean">
+  Indicates if the current checkpoint is the final one.
+</ParamField>
+
+<ParamField path="priority_class_name" type="string">
+  Priority class for the DataVolume import/clone pod.
+</ParamField>
+
+## Access Modes
+
+The `DataVolume.AccessMode` class defines volume access modes:
+
+- `RWO`: ReadWriteOnce - can be mounted read-write by a single node
+- `ROX`: ReadOnlyMany - can be mounted read-only by many nodes
+- `RWX`: ReadWriteMany - can be mounted read-write by many nodes
+
+## Content Types
+
+The `DataVolume.ContentType` class defines data content types:
+
+- `KUBEVIRT`: KubeVirt-specific disk image format
+- `ARCHIVE`: Archive file that needs to be extracted
+
+## Volume Modes
+
+The `DataVolume.VolumeMode` class defines volume modes:
+
+- `BLOCK`: Raw block device
+- `FILE`: Filesystem volume
+
+## Status Values
+
+The `DataVolume.Status` class provides constants for DataVolume states:
+
+- `BLANK`: Blank disk created
+- `PVC_BOUND`: PVC is bound
+- `IMPORT_SCHEDULED`: Import operation scheduled
+- `ClONE_SCHEDULED`: Clone operation scheduled
+- `UPLOAD_SCHEDULED`: Upload operation scheduled
+- `IMPORT_IN_PROGRESS`: Importing data
+- `CLONE_IN_PROGRESS`: Cloning from source
+- `UPLOAD_IN_PROGRESS`: Upload in progress
+- `SNAPSHOT_FOR_SMART_CLONE_IN_PROGRESS`: Creating snapshot for smart clone
+- `SMART_CLONE_PVC_IN_PROGRESS`: Smart clone in progress
+- `UPLOAD_READY`: Ready to receive upload
+- `UNKNOWN`: Status unknown
+- `WAIT_FOR_FIRST_CONSUMER`: Waiting for first consumer (WaitForFirstConsumer binding mode)
+- `PENDING_POPULATION`: Waiting for population to start
+
+## Methods
+
+### wait_for_dv_success()
+
+Waits for the DataVolume to successfully complete provisioning.
+
+<ParamField path="timeout" type="int" default="TIMEOUT_10MINUTES">
+  Maximum time to wait for success (default: 600 seconds).
+</ParamField>
+
+<ParamField path="failure_timeout" type="int" default="TIMEOUT_2MINUTES">
+  Time to wait for non-Pending status (default: 120 seconds).
+</ParamField>
+
+<ParamField path="pvc_wait_for_bound_timeout" type="int" default="TIMEOUT_1MINUTE">
+  Time to wait for PVC to reach Bound status (default: 60 seconds).
+</ParamField>
+
+<ParamField path="dv_garbage_collection_enabled" type="boolean" deprecated>
+  Garbage collection flag (deprecated, removed in v4.19).
+</ParamField>
+
+<ParamField path="stop_status_func" type="callable">
+  Optional function to check for failure conditions. If returns `True`, raises `TimeoutExpiredError`.
+</ParamField>
+
+```python
+dv.wait_for_dv_success(timeout=600)
+```
+
+### wait_deleted()
+
+Waits for both the DataVolume and its associated PVC to be deleted.
+
+<ParamField path="timeout" type="int" default="TIMEOUT_4MINUTES">
+  Maximum time to wait for deletion (default: 240 seconds).
+</ParamField>
+
+```python
+dv.wait_deleted(timeout=300)
+```
+
+### delete()
+
+Deletes the DataVolume.
+
+<ParamField path="wait" type="boolean" default="false">
+  Whether to wait for deletion to complete.
+</ParamField>
+
+<ParamField path="timeout" type="int" default="TIMEOUT_4MINUTES">
+  Maximum time to wait for deletion.
+</ParamField>
+
+<ParamField path="body" type="dict">
+  Optional deletion options body.
+</ParamField>
+
+```python
+dv.delete(wait=True, timeout=240)
+```
+
+## Properties
+
+### pvc
+
+Returns the associated PersistentVolumeClaim object.
+
+```python
+pvc = dv.pvc
+pvc.wait_for_status(status=PersistentVolumeClaim.Status.BOUND)
+```
+
+### scratch_pvc
+
+Returns the scratch PVC used during import/clone operations.
+
+```python
+scratch = dv.scratch_pvc
+```
+
+## Usage Examples
+
+<CodeGroup>
+
+```python HTTP import
+from ocp_resources.datavolume import DataVolume
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Import from HTTP URL
+dv = DataVolume(
+    client=client,
+    name="fedora-dv",
+    namespace="default",
+    source_dict={
+        "http": {
+            "url": "https://download.fedoraproject.org/pub/fedora/linux/releases/38/Cloud/x86_64/images/Fedora-Cloud-Base-38-1.6.x86_64.qcow2"
+        }
+    },
+    size="10Gi",
+    storage_class="standard",
+    access_modes=DataVolume.AccessMode.RWO,
+    volume_mode=DataVolume.VolumeMode.FILE,
+    content_type=DataVolume.ContentType.KUBEVIRT
+)
+
+dv.create()
+dv.wait_for_dv_success(timeout=600)
+```
+
+```python Blank disk creation
+# Create a blank disk
+dv = DataVolume(
+    client=client,
+    name="blank-disk",
+    namespace="default",
+    source_dict={"blank": {}},
+    size="20Gi",
+    storage_class="ceph-rbd",
+    access_modes=DataVolume.AccessMode.RWO,
+    volume_mode=DataVolume.VolumeMode.BLOCK
+)
+
+dv.create()
+dv.wait_for_dv_success()
+```
+
+```python Clone from PVC
+# Clone from existing PVC
+dv = DataVolume(
+    client=client,
+    name="cloned-disk",
+    namespace="target-namespace",
+    source_dict={
+        "pvc": {
+            "name": "source-pvc",
+            "namespace": "source-namespace"
+        }
+    },
+    size="15Gi",
+    storage_class="standard",
+    access_modes=DataVolume.AccessMode.RWO
+)
+
+dv.create()
+dv.wait_for_dv_success()
+```
+
+```python Container registry import
+# Import from container registry
+dv = DataVolume(
+    client=client,
+    name="registry-import",
+    namespace="default",
+    source_dict={
+        "registry": {
+            "url": "docker://quay.io/kubevirt/cirros-container-disk-demo:latest"
+        }
+    },
+    size="5Gi",
+    storage_class="standard",
+    access_modes=DataVolume.AccessMode.RWO,
+    content_type=DataVolume.ContentType.KUBEVIRT
+)
+
+dv.create()
+dv.wait_for_dv_success()
+```
+
+```python Upload preparation
+# Create DataVolume for upload
+dv = DataVolume(
+    client=client,
+    name="upload-disk",
+    namespace="default",
+    source_dict={"upload": {}},
+    size="10Gi",
+    storage_class="standard",
+    access_modes=DataVolume.AccessMode.RWO
+)
+
+dv.create()
+# Wait for upload ready status
+dv.wait_for_status(status=DataVolume.Status.UPLOAD_READY)
+print(f"DataVolume ready for upload")
+```
+
+```python Advanced configuration
+# DataVolume with preallocation and priority class
+dv = DataVolume(
+    client=client,
+    name="advanced-dv",
+    namespace="default",
+    source_dict={
+        "http": {
+            "url": "https://example.com/disk.img"
+        }
+    },
+    size="50Gi",
+    storage_class="fast-storage",
+    access_modes=DataVolume.AccessMode.RWO,
+    volume_mode=DataVolume.VolumeMode.BLOCK,
+    preallocation=True,
+    priority_class_name="high-priority",
+    bind_immediate_annotation=True
+)
+
+dv.create()
+dv.wait_for_dv_success(timeout=1200)
+```
+
+</CodeGroup>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="VirtualMachine" icon="computer" href="/api-reference/virtualization/virtual-machine">
+    Use DataVolumes as persistent disks for VMs
+  </Card>
+  <Card title="Virtual Machines Guide" icon="hard-drive" href="/guides/virtual-machines">
+    Complete guide to working with virtual machines
+  </Card>
+</CardGroup>
+
+## Notes
+
+<Note>
+The `api_name` parameter currently defaults to `"pvc"` but will change to `"storage"` in a future release. Explicitly set `api_name="pvc"` to maintain current behavior.
+</Note>
+
+<Warning>
+The `source` parameter is deprecated. Use `source_dict` instead for better flexibility and type safety.
+</Warning>
+
+<Info>
+DataVolumes with `WaitForFirstConsumer` binding mode will remain in `WAIT_FOR_FIRST_CONSUMER` status until a pod requests the volume. Use `bind_immediate_annotation=True` to bind immediately if needed.
+</Info>

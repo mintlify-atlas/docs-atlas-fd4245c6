@@ -1,0 +1,536 @@
+---
+title: Resource
+description: Base class for all Kubernetes/OpenShift resources
+---
+
+## Overview
+
+The `Resource` class is the base class for all API resources in the OpenShift Python Wrapper. It provides common functionality for CRUD operations, resource management, schema validation, and interaction with Kubernetes/OpenShift clusters.
+
+All resource classes inherit from this base class, either directly or through `NamespacedResource`.
+
+## Class Definition
+
+```python
+from ocp_resources.resource import Resource
+```
+
+## Constructor
+
+<ParamField path="client" type="DynamicClient | None" required>
+  Dynamic client for connecting to a remote cluster. Will become mandatory in the next major release.
+</ParamField>
+
+<ParamField path="name" type="str | None">
+  Resource name
+</ParamField>
+
+<ParamField path="teardown" type="bool" default="True">
+  Indicates if this resource should be deleted on cleanup
+</ParamField>
+
+<ParamField path="yaml_file" type="str | None">
+  Path to YAML file for the resource
+</ParamField>
+
+<ParamField path="delete_timeout" type="int" default="TIMEOUT_4MINUTES">
+  Timeout in seconds for delete operations
+</ParamField>
+
+<ParamField path="dry_run" type="bool" default="False">
+  If True, perform a dry run without creating the resource
+</ParamField>
+
+<ParamField path="node_selector" type="dict[str, Any] | None">
+  Node selector for pod scheduling
+</ParamField>
+
+<ParamField path="node_selector_labels" type="dict[str, str] | None">
+  Node selector labels for pod scheduling
+</ParamField>
+
+<ParamField path="config_file" type="str | None">
+  Path to kubeconfig file for connecting to remote cluster (deprecated, use client instead)
+</ParamField>
+
+<ParamField path="config_dict" type="dict[str, Any] | None">
+  Dictionary with kubeconfig configuration
+</ParamField>
+
+<ParamField path="context" type="str | None">
+  Context name for connecting to remote cluster (deprecated, use client instead)
+</ParamField>
+
+<ParamField path="label" type="dict[str, str] | None">
+  Resource labels to add to metadata
+</ParamField>
+
+<ParamField path="annotations" type="dict[str, str] | None">
+  Resource annotations to add to metadata
+</ParamField>
+
+<ParamField path="api_group" type="str" default="''">
+  Resource API group; will overwrite API group definition in resource class
+</ParamField>
+
+<ParamField path="hash_log_data" type="bool" default="True">
+  Hash resource content based on resource keys_to_hash property (e.g., Secret data)
+</ParamField>
+
+<ParamField path="ensure_exists" type="bool" default="False">
+  Whether to check if the resource exists when initializing, raise if not
+</ParamField>
+
+<ParamField path="kind_dict" type="dict[Any, Any] | None">
+  Dictionary representing the resource object
+</ParamField>
+
+<ParamField path="wait_for_resource" type="bool" default="False">
+  Waits for the resource to be created when using deploy()
+</ParamField>
+
+<ParamField path="schema_validation_enabled" type="bool" default="False">
+  Enable automatic schema validation for this instance. Set to True to validate on create/update operations.
+</ParamField>
+
+## Class Attributes
+
+<ParamField path="api_group" type="str">
+  API group for the resource (e.g., "apps", "batch")
+</ParamField>
+
+<ParamField path="api_version" type="str">
+  API version (e.g., "v1", "v1beta1")
+</ParamField>
+
+<ParamField path="singular_name" type="str">
+  Singular resource name for API calls
+</ParamField>
+
+<ParamField path="timeout_seconds" type="int" default="TIMEOUT_1MINUTE">
+  Default timeout for API operations
+</ParamField>
+
+## Methods
+
+### create
+
+Create the resource in the cluster.
+
+```python
+def create(
+    self,
+    wait: bool = False,
+    exceptions_dict: dict[type[Exception], list[str]] = DEFAULT_CLUSTER_RETRY_EXCEPTIONS | PROTOCOL_ERROR_EXCEPTION_DICT,
+) -> ResourceInstance | None
+```
+
+<ParamField path="wait" type="bool" default="False">
+  True to wait for resource status after creation
+</ParamField>
+
+<ParamField path="exceptions_dict" type="dict[type[Exception], list[str]]">
+  Dictionary of exceptions to retry on
+</ParamField>
+
+**Returns:** Created resource instance or None if create failed
+
+### delete
+
+Delete the resource from the cluster.
+
+```python
+def delete(
+    self,
+    wait: bool = False,
+    timeout: int = TIMEOUT_4MINUTES,
+    body: dict[str, Any] | None = None
+) -> bool
+```
+
+<ParamField path="wait" type="bool" default="False">
+  Wait for resource deletion to complete
+</ParamField>
+
+<ParamField path="timeout" type="int" default="TIMEOUT_4MINUTES">
+  Timeout in seconds to wait for resource deletion
+</ParamField>
+
+<ParamField path="body" type="dict[str, Any] | None">
+  Optional request body for deletion
+</ParamField>
+
+**Returns:** True if resource was deleted, False otherwise
+
+### update
+
+Update the resource with a resource dictionary (partial update/patch).
+
+```python
+def update(self, resource_dict: dict[str, Any]) -> None
+```
+
+<ParamField path="resource_dict" type="dict[str, Any]" required>
+  Resource dictionary with fields to update
+</ParamField>
+
+### update_replace
+
+Replace the resource metadata completely. Use this to remove existing fields.
+
+```python
+def update_replace(self, resource_dict: dict[str, Any]) -> None
+```
+
+<ParamField path="resource_dict" type="dict[str, Any]" required>
+  Complete resource dictionary to replace with
+</ParamField>
+
+### deploy
+
+Deploy the resource using context manager pattern.
+
+```python
+def deploy(self, wait: bool = False) -> Self
+```
+
+<ParamField path="wait" type="bool" default="False">
+  Wait for resource to be ready after deployment
+</ParamField>
+
+**Returns:** Self for method chaining
+
+### clean_up
+
+Clean up (delete) the resource.
+
+```python
+def clean_up(self, wait: bool = True, timeout: int | None = None) -> bool
+```
+
+<ParamField path="wait" type="bool" default="True">
+  Wait for resource deletion
+</ParamField>
+
+<ParamField path="timeout" type="int | None">
+  Timeout in seconds, defaults to delete_timeout
+</ParamField>
+
+**Returns:** True if resource was deleted, False otherwise
+
+### wait
+
+Wait for the resource to exist.
+
+```python
+def wait(self, timeout: int = TIMEOUT_4MINUTES, sleep: int = 1) -> None
+```
+
+<ParamField path="timeout" type="int" default="TIMEOUT_4MINUTES">
+  Time to wait for the resource
+</ParamField>
+
+<ParamField path="sleep" type="int" default="1">
+  Time to wait between retries
+</ParamField>
+
+**Raises:** `TimeoutExpiredError` if resource does not exist within timeout
+
+### wait_deleted
+
+Wait until the resource is deleted.
+
+```python
+def wait_deleted(self, timeout: int = TIMEOUT_4MINUTES) -> bool
+```
+
+<ParamField path="timeout" type="int" default="TIMEOUT_4MINUTES">
+  Time to wait for the resource
+</ParamField>
+
+**Returns:** True if deleted, False if timeout expired
+
+### wait_for_status
+
+Wait for the resource to reach a specific status.
+
+```python
+def wait_for_status(
+    self,
+    status: str,
+    timeout: int = TIMEOUT_4MINUTES,
+    stop_status: str | None = None,
+    sleep: int = 1,
+    exceptions_dict: dict[type[Exception], list[str]] = PROTOCOL_ERROR_EXCEPTION_DICT | DEFAULT_CLUSTER_RETRY_EXCEPTIONS,
+) -> None
+```
+
+<ParamField path="status" type="str" required>
+  Expected status (e.g., "Running", "Succeeded")
+</ParamField>
+
+<ParamField path="timeout" type="int" default="TIMEOUT_4MINUTES">
+  Time to wait for the resource
+</ParamField>
+
+<ParamField path="stop_status" type="str | None">
+  Status which should stop the wait and fail (defaults to "Failed")
+</ParamField>
+
+<ParamField path="sleep" type="int" default="1">
+  Time between status checks
+</ParamField>
+
+### wait_for_condition
+
+Wait for a resource condition to reach the desired status.
+
+```python
+def wait_for_condition(
+    self,
+    condition: str,
+    status: str,
+    timeout: int = 300,
+    sleep_time: int = 1,
+    reason: str | None = None,
+    message: str = "",
+    stop_condition: str | None = None,
+    stop_status: str = "True",
+) -> None
+```
+
+<ParamField path="condition" type="str" required>
+  Condition type to query (e.g., "Ready", "Available")
+</ParamField>
+
+<ParamField path="status" type="str" required>
+  Expected condition status (e.g., "True", "False")
+</ParamField>
+
+<ParamField path="timeout" type="int" default="300">
+  Time to wait in seconds
+</ParamField>
+
+<ParamField path="sleep_time" type="int" default="1">
+  Interval between each retry
+</ParamField>
+
+<ParamField path="reason" type="str | None">
+  Expected condition reason
+</ParamField>
+
+<ParamField path="message" type="str" default="''">
+  Expected text in condition message
+</ParamField>
+
+<ParamField path="stop_condition" type="str | None">
+  Condition which should stop the wait and fail
+</ParamField>
+
+<ParamField path="stop_status" type="str" default="'True'">
+  Status of the stop condition
+</ParamField>
+
+### validate
+
+Validate the resource against its OpenAPI schema.
+
+```python
+def validate(self) -> None
+```
+
+**Raises:** `ValidationError` if the resource is invalid according to the schema
+
+### get (class method)
+
+Get resources from the cluster.
+
+```python
+@classmethod
+def get(
+    cls,
+    client: DynamicClient | None = None,
+    dyn_client: DynamicClient | None = None,
+    config_file: str = "",
+    singular_name: str = "",
+    exceptions_dict: dict[type[Exception], list[str]] = DEFAULT_CLUSTER_RETRY_EXCEPTIONS,
+    raw: bool = False,
+    context: str | None = None,
+    *args: Any,
+    **kwargs: Any,
+) -> Generator[Any, None, None]
+```
+
+<ParamField path="client" type="DynamicClient | None">
+  Kubernetes client
+</ParamField>
+
+<ParamField path="singular_name" type="str" default="''">
+  Resource kind in lowercase for disambiguation
+</ParamField>
+
+<ParamField path="raw" type="bool" default="False">
+  If True, return raw ResourceInstance objects
+</ParamField>
+
+**Returns:** Generator of resource objects
+
+## Properties
+
+### exists
+
+```python
+@property
+def exists(self) -> ResourceInstance | None
+```
+
+Returns the resource instance if it exists on the server, None otherwise.
+
+### instance
+
+```python
+@property
+def instance(self) -> ResourceInstance
+```
+
+Get the current resource instance from the cluster.
+
+### status
+
+```python
+@property
+def status(self) -> str
+```
+
+Get resource status phase (e.g., "Running", "Pending", "Failed").
+
+### labels
+
+```python
+@property
+def labels(self) -> ResourceField
+```
+
+Get resource labels.
+
+### api
+
+```python
+@property
+def api(self) -> ResourceInstance
+```
+
+Get the API resource instance for making API calls.
+
+## Context Manager Usage
+
+The Resource class can be used as a context manager for automatic cleanup:
+
+```python
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Automatically cleans up the pod when exiting the context
+with Pod(
+    client=client,
+    name="my-pod",
+    namespace="default",
+    containers=[{"name": "nginx", "image": "nginx:latest"}],
+) as pod:
+    print(f"Pod {pod.name} is running")
+    # Pod is automatically deleted when exiting this block
+```
+
+## Examples
+
+### Basic Resource Creation
+
+```python
+from ocp_resources.namespace import Namespace
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Create a namespace
+ns = Namespace(client=client, name="my-namespace")
+ns.create(wait=True)
+
+print(f"Namespace {ns.name} created")
+
+# Clean up
+ns.delete(wait=True)
+```
+
+### Using YAML File
+
+```python
+from ocp_resources.deployment import Deployment
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+deploy = Deployment(
+    client=client,
+    yaml_file="/path/to/deployment.yaml"
+)
+deploy.create()
+```
+
+### Waiting for Conditions
+
+```python
+from ocp_resources.deployment import Deployment
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+deploy = Deployment(client=client, name="my-app", namespace="default")
+
+# Wait for the deployment to be available
+deploy.wait_for_condition(
+    condition="Available",
+    status="True",
+    timeout=300
+)
+```
+
+### Schema Validation
+
+```python
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+pod = Pod(
+    client=client,
+    name="validated-pod",
+    namespace="default",
+    containers=[{"name": "nginx", "image": "nginx:latest"}],
+    schema_validation_enabled=True  # Enable automatic validation
+)
+
+# Will validate against OpenAPI schema before creating
+pod.create()
+```
+
+### Listing Resources
+
+```python
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Get all pods in a namespace
+for pod in Pod.get(client=client, namespace="default"):
+    print(f"Pod: {pod.name}, Status: {pod.status}")
+```
+
+## See Also
+
+- [NamespacedResource](/api-reference/namespaced-resource) - Base class for namespaced resources
+- [Pod](/api-reference/pod) - Pod resource implementation
+- [Deployment](/api-reference/deployment) - Deployment resource implementation

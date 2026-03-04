@@ -1,0 +1,238 @@
+---
+title: NamespacedResource
+description: Base class for namespaced Kubernetes/OpenShift resources
+---
+
+## Overview
+
+The `NamespacedResource` class extends the `Resource` class to provide functionality specific to namespaced resources. Most Kubernetes resources (Pods, Deployments, Services, etc.) are namespaced and inherit from this class.
+
+## Class Definition
+
+```python
+from ocp_resources.resource import NamespacedResource
+```
+
+## Constructor
+
+NamespacedResource accepts all parameters from the [Resource](/api-reference/resource) base class, plus:
+
+<ParamField path="name" type="str | None" required>
+  Resource name
+</ParamField>
+
+<ParamField path="namespace" type="str | None" required>
+  Namespace where the resource will be created
+</ParamField>
+
+<ParamField path="client" type="DynamicClient | None">
+  Dynamic client for connecting to a remote cluster
+</ParamField>
+
+<ParamField path="teardown" type="bool" default="True">
+  Indicates if this resource should be deleted on cleanup
+</ParamField>
+
+<ParamField path="yaml_file" type="str | None">
+  Path to YAML file for the resource
+</ParamField>
+
+<ParamField path="delete_timeout" type="int" default="TIMEOUT_4MINUTES">
+  Timeout in seconds for delete operations
+</ParamField>
+
+<ParamField path="ensure_exists" type="bool" default="False">
+  Whether to check if the resource exists when initializing, raise if not
+</ParamField>
+
+## Methods
+
+### get (class method)
+
+Get namespaced resources from the cluster.
+
+```python
+@classmethod
+def get(
+    cls,
+    client: DynamicClient | None = None,
+    dyn_client: DynamicClient | None = None,
+    config_file: str = "",
+    singular_name: str = "",
+    exceptions_dict: dict[type[Exception], list[str]] = DEFAULT_CLUSTER_RETRY_EXCEPTIONS,
+    raw: bool = False,
+    context: str | None = None,
+    *args: Any,
+    **kwargs: Any,
+) -> Generator[Any, None, None]
+```
+
+<ParamField path="client" type="DynamicClient | None">
+  Kubernetes client
+</ParamField>
+
+<ParamField path="namespace" type="str">
+  Namespace to search in (passed as kwarg)
+</ParamField>
+
+<ParamField path="singular_name" type="str" default="''">
+  Resource kind in lowercase for disambiguation
+</ParamField>
+
+<ParamField path="raw" type="bool" default="False">
+  If True, return raw ResourceInstance objects
+</ParamField>
+
+**Returns:** Generator of namespaced resource objects
+
+## Properties
+
+### instance
+
+```python
+@property
+def instance(self) -> ResourceInstance
+```
+
+Get the current resource instance from the cluster. Overrides the base Resource.instance property to include namespace in the API call.
+
+## Inherited Methods
+
+NamespacedResource inherits all methods from [Resource](/api-reference/resource), including:
+
+- `create()` - Create the resource
+- `delete()` - Delete the resource
+- `update()` - Update the resource
+- `update_replace()` - Replace the resource
+- `wait()` - Wait for resource to exist
+- `wait_deleted()` - Wait for resource deletion
+- `wait_for_status()` - Wait for specific status
+- `wait_for_condition()` - Wait for specific condition
+- `validate()` - Validate against schema
+
+## Examples
+
+### Creating a Namespaced Resource
+
+```python
+from ocp_resources.config_map import ConfigMap
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+cm = ConfigMap(
+    client=client,
+    name="my-config",
+    namespace="default",
+    data={"key1": "value1", "key2": "value2"}
+)
+cm.create()
+
+print(f"ConfigMap created in namespace: {cm.namespace}")
+```
+
+### Listing Resources in a Namespace
+
+```python
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Get all pods in the 'default' namespace
+for pod in Pod.get(client=client, namespace="default"):
+    print(f"Pod: {pod.name} in namespace {pod.namespace}")
+```
+
+### Listing Resources Across All Namespaces
+
+```python
+from ocp_resources.service import Service
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Get all services across all namespaces (omit namespace parameter)
+for svc in Service.get(client=client):
+    print(f"Service: {svc.name} in namespace {svc.namespace}")
+```
+
+### Using with Context Manager
+
+```python
+from ocp_resources.secret import Secret
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Automatically cleans up the secret when exiting the context
+with Secret(
+    client=client,
+    name="my-secret",
+    namespace="default",
+    string_data={"username": "admin", "password": "secret123"}
+) as secret:
+    print(f"Secret {secret.name} created in {secret.namespace}")
+    # Secret is automatically deleted when exiting this block
+```
+
+### Checking if Resource Exists
+
+```python
+from ocp_resources.service import Service
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+try:
+    # This will raise an exception if the service doesn't exist
+    svc = Service(
+        client=client,
+        name="kubernetes",
+        namespace="default",
+        ensure_exists=True
+    )
+    print(f"Service {svc.name} exists")
+except ResourceNotFoundError:
+    print("Service not found")
+```
+
+### Working with Resource from YAML
+
+```python
+from ocp_resources.deployment import Deployment
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Create from YAML file - namespace will be read from the YAML
+deploy = Deployment(
+    client=client,
+    yaml_file="/path/to/deployment.yaml"
+)
+deploy.create(wait=True)
+
+print(f"Deployment {deploy.name} created in namespace {deploy.namespace}")
+```
+
+## Common Namespaced Resources
+
+Resources that inherit from NamespacedResource include:
+
+- [Pod](/api-reference/pod) - Container workloads
+- [Deployment](/api-reference/deployment) - Deployment management
+- [Service](/api-reference/service) - Service networking
+- [ConfigMap](/api-reference/configmap) - Configuration data
+- [Secret](/api-reference/secret) - Sensitive data
+- ReplicaSet - Pod replica management
+- StatefulSet - Stateful workloads
+- Job - Batch workloads
+- CronJob - Scheduled workloads
+- And many more...
+
+## See Also
+
+- [Resource](/api-reference/resource) - Base resource class
+- [Pod](/api-reference/pod) - Pod resource
+- [Deployment](/api-reference/deployment) - Deployment resource
+- [Service](/api-reference/service) - Service resource

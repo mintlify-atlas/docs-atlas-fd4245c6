@@ -1,0 +1,377 @@
+---
+title: Deployment
+description: Deployment resource for declarative updates of Pods and ReplicaSets
+---
+
+## Overview
+
+The `Deployment` class represents a Kubernetes Deployment, which enables declarative updates for Pods and ReplicaSets. Deployments provide features like rolling updates, rollbacks, and scaling.
+
+## Class Definition
+
+```python
+from ocp_resources.deployment import Deployment
+```
+
+**API Group:** `apps`
+
+## Constructor
+
+Deployment accepts all parameters from [NamespacedResource](/api-reference/namespaced-resource), plus:
+
+<ParamField path="selector" type="dict[str, Any]" required>
+  Label selector for pods. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects.
+</ParamField>
+
+<ParamField path="template" type="dict[str, Any]" required>
+  Pod template describing the pods that will be created. Must include metadata and spec.
+</ParamField>
+
+<ParamField path="min_ready_seconds" type="int | None">
+  Minimum number of seconds for which a newly created pod should be ready without any container crashing for it to be considered available. Defaults to 0.
+</ParamField>
+
+<ParamField path="paused" type="bool | None">
+  Indicates that the deployment is paused
+</ParamField>
+
+<ParamField path="progress_deadline_seconds" type="int | None">
+  Maximum time in seconds for a deployment to make progress before it is considered failed. Defaults to 600s.
+</ParamField>
+
+<ParamField path="replicas" type="int | None">
+  Number of desired pods. Defaults to 1.
+</ParamField>
+
+<ParamField path="revision_history_limit" type="int | None">
+  Number of old ReplicaSets to retain for rollback. Defaults to 10.
+</ParamField>
+
+<ParamField path="strategy" type="dict[str, Any] | None">
+  Deployment strategy describing how to replace existing pods with new ones. Types include `RollingUpdate` and `Recreate`.
+</ParamField>
+
+## Methods
+
+### scale_replicas
+
+Update the number of replicas in the deployment.
+
+```python
+def scale_replicas(self, replica_count: int)
+```
+
+<ParamField path="replica_count" type="int" required>
+  Number of replicas to scale to
+</ParamField>
+
+**Returns:** Result of the update operation
+
+### wait_for_replicas
+
+Wait until all replicas are updated and available.
+
+```python
+def wait_for_replicas(
+    self,
+    deployed: bool = True,
+    timeout: int = TIMEOUT_4MINUTES
+) -> None
+```
+
+<ParamField path="deployed" type="bool" default="True">
+  True to wait for replicas to be deployed, False to wait for no replicas
+</ParamField>
+
+<ParamField path="timeout" type="int" default="TIMEOUT_4MINUTES">
+  Time to wait for the deployment in seconds
+</ParamField>
+
+**Raises:** `TimeoutExpiredError` if replicas are not ready within timeout
+
+## Inherited Methods
+
+Deployment inherits all methods from [NamespacedResource](/api-reference/namespaced-resource) and [Resource](/api-reference/resource).
+
+## Examples
+
+### Creating a Basic Deployment
+
+```python
+from ocp_resources.deployment import Deployment
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+deployment = Deployment(
+    client=client,
+    name="nginx-deployment",
+    namespace="default",
+    replicas=3,
+    selector={"matchLabels": {"app": "nginx"}},
+    template={
+        "metadata": {"labels": {"app": "nginx"}},
+        "spec": {
+            "containers": [{
+                "name": "nginx",
+                "image": "nginx:1.14.2",
+                "ports": [{"containerPort": 80}]
+            }]
+        }
+    }
+)
+deployment.create(wait=True)
+
+print(f"Deployment {deployment.name} created")
+```
+
+### Creating a Deployment with Rolling Update Strategy
+
+```python
+from ocp_resources.deployment import Deployment
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+deployment = Deployment(
+    client=client,
+    name="app-deployment",
+    namespace="default",
+    replicas=5,
+    selector={"matchLabels": {"app": "myapp"}},
+    template={
+        "metadata": {"labels": {"app": "myapp"}},
+        "spec": {
+            "containers": [{
+                "name": "app",
+                "image": "myapp:v1"
+            }]
+        }
+    },
+    strategy={
+        "type": "RollingUpdate",
+        "rollingUpdate": {
+            "maxSurge": 1,
+            "maxUnavailable": 0
+        }
+    }
+)
+deployment.create()
+```
+
+### Scaling a Deployment
+
+```python
+from ocp_resources.deployment import Deployment
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+deployment = Deployment(
+    client=client,
+    name="nginx-deployment",
+    namespace="default"
+)
+
+# Scale to 5 replicas
+deployment.scale_replicas(replica_count=5)
+
+# Wait for all replicas to be ready
+deployment.wait_for_replicas(deployed=True, timeout=300)
+
+print(f"Deployment scaled to 5 replicas")
+```
+
+### Scaling Down to Zero
+
+```python
+from ocp_resources.deployment import Deployment
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+deployment = Deployment(
+    client=client,
+    name="nginx-deployment",
+    namespace="default"
+)
+
+# Scale down to 0 replicas
+deployment.scale_replicas(replica_count=0)
+
+# Wait for all pods to be terminated
+deployment.wait_for_replicas(deployed=False, timeout=300)
+
+print("Deployment scaled down to 0")
+```
+
+### Deployment with Resource Limits
+
+```python
+from ocp_resources.deployment import Deployment
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+deployment = Deployment(
+    client=client,
+    name="resource-limited-app",
+    namespace="default",
+    replicas=3,
+    selector={"matchLabels": {"app": "myapp"}},
+    template={
+        "metadata": {"labels": {"app": "myapp"}},
+        "spec": {
+            "containers": [{
+                "name": "app",
+                "image": "myapp:latest",
+                "resources": {
+                    "requests": {
+                        "memory": "128Mi",
+                        "cpu": "100m"
+                    },
+                    "limits": {
+                        "memory": "256Mi",
+                        "cpu": "200m"
+                    }
+                }
+            }]
+        }
+    }
+)
+deployment.create()
+```
+
+### Waiting for Deployment to be Available
+
+```python
+from ocp_resources.deployment import Deployment
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+deployment = Deployment(
+    client=client,
+    name="nginx-deployment",
+    namespace="default",
+    replicas=3,
+    selector={"matchLabels": {"app": "nginx"}},
+    template={
+        "metadata": {"labels": {"app": "nginx"}},
+        "spec": {
+            "containers": [{"name": "nginx", "image": "nginx:latest"}]
+        }
+    }
+)
+deployment.create()
+
+# Wait for deployment to be available
+deployment.wait_for_condition(
+    condition="Available",
+    status="True",
+    timeout=300
+)
+
+print("Deployment is available")
+```
+
+### Using Context Manager
+
+```python
+from ocp_resources.deployment import Deployment
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+with Deployment(
+    client=client,
+    name="temp-deployment",
+    namespace="default",
+    replicas=2,
+    selector={"matchLabels": {"app": "temp"}},
+    template={
+        "metadata": {"labels": {"app": "temp"}},
+        "spec": {
+            "containers": [{"name": "nginx", "image": "nginx:latest"}]
+        }
+    },
+    wait_for_resource=True
+) as deploy:
+    deploy.wait_for_replicas(deployed=True)
+    print(f"Deployment {deploy.name} is running")
+    # Deployment is automatically deleted when exiting this block
+```
+
+### Creating from YAML
+
+```python
+from ocp_resources.deployment import Deployment
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+deployment = Deployment(
+    client=client,
+    yaml_file="/path/to/deployment.yaml"
+)
+deployment.create()
+deployment.wait_for_replicas(deployed=True)
+```
+
+### Listing All Deployments
+
+```python
+from ocp_resources.deployment import Deployment
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# List all deployments in a namespace
+for deploy in Deployment.get(client=client, namespace="default"):
+    status = deploy.instance.status
+    print(f"Deployment: {deploy.name}")
+    print(f"  Replicas: {status.replicas}")
+    print(f"  Available: {status.availableReplicas or 0}")
+    print(f"  Ready: {status.readyReplicas or 0}")
+```
+
+### Updating Deployment Image
+
+```python
+from ocp_resources.deployment import Deployment
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+deployment = Deployment(
+    client=client,
+    name="nginx-deployment",
+    namespace="default"
+)
+
+# Update the container image
+deployment.update({
+    "spec": {
+        "template": {
+            "spec": {
+                "containers": [{
+                    "name": "nginx",
+                    "image": "nginx:1.21.0"
+                }]
+            }
+        }
+    }
+})
+
+# Wait for rollout to complete
+deployment.wait_for_replicas(deployed=True, timeout=300)
+
+print("Deployment image updated")
+```
+
+## See Also
+
+- [NamespacedResource](/api-reference/namespaced-resource) - Base class
+- [Pod](/api-reference/pod) - Individual container workloads
+- [Service](/api-reference/service) - For exposing deployments
+- [ReplicaSet](https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/) - Kubernetes ReplicaSet concept

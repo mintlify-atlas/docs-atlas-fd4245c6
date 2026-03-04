@@ -1,0 +1,516 @@
+---
+title: Working with Virtual Machines
+description: Learn how to create and manage virtual machines using OpenShift Virtualization with the Python Wrapper
+---
+
+## Overview
+
+The `VirtualMachine` class provides comprehensive support for managing virtual machines in OpenShift Virtualization (based on KubeVirt). You can create, start, stop, restart VMs, and interact with their instances.
+
+## Prerequisites
+
+Before working with virtual machines, ensure:
+
+- OpenShift Virtualization (KubeVirt) is installed on your cluster
+- You have proper permissions to create VirtualMachine resources
+- Required container disk images are available
+
+## Creating a Virtual Machine
+
+### Basic VM Creation
+
+Create a simple virtual machine with minimal configuration:
+
+```python
+from ocp_resources.resource import get_client
+from ocp_resources.virtual_machine import VirtualMachine
+
+client = get_client()
+
+vm = VirtualMachine(
+    client=client,
+    name="vm-example",
+    namespace="default",
+    body={
+        "spec": {
+            "runStrategy": "Halted",
+            "template": {
+                "spec": {
+                    "domain": {
+                        "devices": {
+                            "disks": [{"name": "disk0", "disk": {"bus": "virtio"}}]
+                        },
+                        "resources": {"requests": {"memory": "64Mi"}}
+                    },
+                    "volumes": [{
+                        "name": "disk0",
+                        "containerDisk": {
+                            "image": "kubevirt/cirros-container-disk-demo"
+                        }
+                    }]
+                }
+            }
+        }
+    }
+)
+
+vm.create()
+print(f"VM {vm.name} created")
+```
+
+### VM with Custom Resources
+
+Create a VM with specific CPU and memory:
+
+```python
+vm = VirtualMachine(
+    client=client,
+    name="custom-vm",
+    namespace="production",
+    body={
+        "spec": {
+            "runStrategy": "Manual",
+            "template": {
+                "spec": {
+                    "domain": {
+                        "cpu": {"cores": 2},
+                        "resources": {
+                            "requests": {
+                                "memory": "2Gi",
+                                "cpu": "1"
+                            },
+                            "limits": {
+                                "memory": "4Gi",
+                                "cpu": "2"
+                            }
+                        },
+                        "devices": {
+                            "disks": [
+                                {"name": "rootdisk", "disk": {"bus": "virtio"}},
+                                {"name": "cloudinit", "disk": {"bus": "virtio"}}
+                            ]
+                        }
+                    },
+                    "volumes": [
+                        {
+                            "name": "rootdisk",
+                            "containerDisk": {"image": "quay.io/kubevirt/fedora-cloud-container-disk-demo"}
+                        },
+                        {
+                            "name": "cloudinit",
+                            "cloudInitNoCloud": {
+                                "userData": "#cloud-config\npassword: fedora\nchpasswd: { expire: False }"
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    }
+)
+
+vm.create()
+```
+
+<Note>
+The `body` parameter contains the VM specification. It must include the `spec.template` structure that defines the VM's hardware and configuration.
+</Note>
+
+## Run Strategies
+
+Virtual machines support different run strategies:
+
+```python
+# Manual: Start/stop controlled manually
+vm = VirtualMachine(
+    client=client,
+    name="manual-vm",
+    namespace="default",
+    body={
+        "spec": {
+            "runStrategy": VirtualMachine.RunStrategy.MANUAL,
+            "template": {...}
+        }
+    }
+)
+
+# Always: VM should always be running
+vm = VirtualMachine(
+    client=client,
+    name="always-running-vm",
+    namespace="default",
+    body={
+        "spec": {
+            "runStrategy": VirtualMachine.RunStrategy.ALWAYS,
+            "template": {...}
+        }
+    }
+)
+
+# Halted: VM should be stopped
+vm = VirtualMachine(
+    client=client,
+    name="halted-vm",
+    namespace="default",
+    body={
+        "spec": {
+            "runStrategy": VirtualMachine.RunStrategy.HALTED,
+            "template": {...}
+        }
+    }
+)
+
+# RerunOnFailure: Restart VM if it fails
+vm = VirtualMachine(
+    client=client,
+    name="resilient-vm",
+    namespace="default",
+    body={
+        "spec": {
+            "runStrategy": VirtualMachine.RunStrategy.RERUNONFAILURE,
+            "template": {...}
+        }
+    }
+)
+```
+
+## VM Lifecycle Operations
+
+### Start a Virtual Machine
+
+Start a VM and wait for it to be running:
+
+```python
+# Start the VM
+vm.start()
+
+# Start and wait for it to be ready
+vm.start(wait=True, timeout=240)
+
+print(f"VM {vm.name} is running")
+```
+
+### Stop a Virtual Machine
+
+Gracefully stop a running VM:
+
+```python
+# Stop the VM
+vm.stop()
+
+# Stop and wait for complete shutdown
+vm.stop(wait=True, timeout=240, vmi_delete_timeout=240)
+
+print(f"VM {vm.name} is stopped")
+```
+
+### Restart a Virtual Machine
+
+Restart a running VM:
+
+```python
+# Restart the VM
+vm.restart()
+
+# Restart and wait for it to be running again
+vm.restart(wait=True, timeout=300)
+
+print(f"VM {vm.name} restarted")
+```
+
+<Warning>
+When using `wait=True`, ensure you set appropriate timeout values. VM operations can take several minutes depending on the image size and cluster performance.
+</Warning>
+
+## Working with VirtualMachineInstance
+
+### Access the VMI
+
+When a VM is running, it creates a VirtualMachineInstance (VMI):
+
+```python
+# Start the VM
+vm.start(wait=True, timeout=180)
+
+# Access the VMI
+vmi = vm.vmi
+print(f"VMI name: {vmi.name}")
+print(f"VMI status: {vmi.instance.status.phase}")
+
+# Wait for VMI to be running
+vmi.wait_until_running(timeout=180)
+```
+
+### Get VMI Details
+
+```python
+vmi = vm.vmi
+
+# Get VMI IP address
+if vmi.instance.status.interfaces:
+    for interface in vmi.instance.status.interfaces:
+        print(f"Interface: {interface.name}, IP: {interface.ipAddress}")
+
+# Check VMI conditions
+for condition in vmi.instance.status.conditions or []:
+    print(f"Condition: {condition.type}, Status: {condition.status}")
+```
+
+## Waiting for VM Status
+
+### Wait for Ready Status
+
+Wait for a VM to reach a specific ready state:
+
+```python
+# Wait for VM to be ready (running)
+vm.wait_for_ready_status(status=True, timeout=240)
+
+# Wait for VM to be stopped (not ready)
+vm.wait_for_ready_status(status=None, timeout=240)
+
+print(f"VM reached desired status")
+```
+
+### Custom Wait Logic
+
+```python
+from timeout_sampler import TimeoutSampler
+
+# Wait for specific condition
+for sample in TimeoutSampler(
+    wait_timeout=300,
+    sleep=5,
+    func=lambda: vm.instance
+):
+    if sample and hasattr(sample.status, 'ready'):
+        if sample.status.ready:
+            print("VM is ready")
+            break
+```
+
+## VM Network Configuration
+
+### Get Network Interfaces
+
+Retrieve configured network interfaces:
+
+```python
+# Get VM interfaces
+interfaces = vm.get_interfaces()
+
+for interface in interfaces:
+    print(f"Interface name: {interface.name}")
+    print(f"Model: {interface.model if hasattr(interface, 'model') else 'default'}")
+```
+
+### VM with Multiple Networks
+
+```python
+vm = VirtualMachine(
+    client=client,
+    name="multi-network-vm",
+    namespace="default",
+    body={
+        "spec": {
+            "runStrategy": "Manual",
+            "template": {
+                "spec": {
+                    "domain": {
+                        "devices": {
+                            "interfaces": [
+                                {"name": "default", "masquerade": {}},
+                                {"name": "secondary", "bridge": {}}
+                            ],
+                            "disks": [{"name": "disk0", "disk": {"bus": "virtio"}}]
+                        },
+                        "resources": {"requests": {"memory": "1Gi"}}
+                    },
+                    "networks": [
+                        {"name": "default", "pod": {}},
+                        {"name": "secondary", "multus": {"networkName": "bridge-network"}}
+                    ],
+                    "volumes": [{
+                        "name": "disk0",
+                        "containerDisk": {"image": "kubevirt/fedora-cloud-container-disk-demo"}
+                    }]
+                }
+            }
+        }
+    }
+)
+
+vm.create()
+```
+
+## VM Status and States
+
+The `VirtualMachine.Status` class provides common VM states:
+
+```python
+# Check for specific statuses
+if vm.instance.status.printableStatus == VirtualMachine.Status.RUNNING:
+    print("VM is running")
+elif vm.instance.status.printableStatus == VirtualMachine.Status.STOPPED:
+    print("VM is stopped")
+elif vm.instance.status.printableStatus == VirtualMachine.Status.STARTING:
+    print("VM is starting")
+elif vm.instance.status.printableStatus == VirtualMachine.Status.PROVISIONING:
+    print("VM is being provisioned")
+```
+
+Available status constants:
+- `VirtualMachine.Status.MIGRATING`
+- `VirtualMachine.Status.PAUSED`
+- `VirtualMachine.Status.PROVISIONING`
+- `VirtualMachine.Status.STARTING`
+- `VirtualMachine.Status.STOPPED`
+- `VirtualMachine.Status.STOPPING`
+- `VirtualMachine.Status.WAITING_FOR_VOLUME_BINDING`
+- `VirtualMachine.Status.ERROR_UNSCHEDULABLE`
+- `VirtualMachine.Status.DATAVOLUME_ERROR`
+
+## Complete Example
+
+Here's a complete workflow for creating and managing a VM:
+
+```python
+from ocp_resources.resource import get_client
+from ocp_resources.virtual_machine import VirtualMachine
+
+client = get_client()
+
+# Define and create VM
+vm = VirtualMachine(
+    client=client,
+    name="demo-vm",
+    namespace="virtualization",
+    body={
+        "spec": {
+            "runStrategy": "Halted",
+            "template": {
+                "spec": {
+                    "domain": {
+                        "devices": {
+                            "disks": [{"name": "disk0", "disk": {"bus": "virtio"}}]
+                        },
+                        "resources": {"requests": {"memory": "1Gi"}}
+                    },
+                    "volumes": [{
+                        "name": "disk0",
+                        "containerDisk": {
+                            "image": "kubevirt/cirros-container-disk-demo"
+                        }
+                    }]
+                }
+            }
+        }
+    }
+)
+
+vm.create()
+print(f"VM {vm.name} created")
+
+# Start the VM
+vm.start()
+print("Starting VM...")
+
+# Wait for VMI to be running
+vmi = vm.vmi
+vmi.wait_until_running(timeout=180)
+print(f"VM is running")
+
+# Perform operations...
+# ...
+
+# Stop the VM
+vm.stop(wait=True, timeout=240)
+print("VM stopped")
+
+# Clean up
+vm.clean_up()
+print("VM deleted")
+```
+
+## Troubleshooting
+
+### VM Not Starting
+
+<Steps>
+  1. Check VM status:
+     ```python
+     print(f"Status: {vm.instance.status.printableStatus}")
+     for condition in vm.instance.status.conditions or []:
+         print(f"{condition.type}: {condition.status} - {condition.message}")
+     ```
+
+  2. Check VMI if created:
+     ```python
+     try:
+         vmi = vm.vmi
+         if vmi.exists:
+             print(f"VMI phase: {vmi.instance.status.phase}")
+     except Exception as e:
+         print(f"VMI not found: {e}")
+     ```
+
+  3. Check events:
+     ```python
+     from ocp_resources.event import Event
+     
+     for event in Event.get(client=client, namespace=vm.namespace):
+         if event.instance.involvedObject.name == vm.name:
+             print(f"Event: {event.instance.message}")
+     ```
+</Steps>
+
+### Image Pull Issues
+
+<Warning>
+If you see `ImagePullBackOff` or `ErrImagePull` status, verify that the container disk image is accessible and correctly specified.
+</Warning>
+
+```python
+# Check for image pull errors
+if vm.instance.status.printableStatus == VirtualMachine.Status.IMAGE_PULL_BACK_OFF:
+    print("Image pull failed - check image name and registry access")
+```
+
+### VM Stuck in Starting State
+
+```python
+import time
+
+vm.start()
+
+# Monitor status for 5 minutes
+for i in range(60):
+    status = vm.instance.status.printableStatus
+    print(f"Status at {i*5}s: {status}")
+    
+    if status == VirtualMachine.Status.RUNNING:
+        print("VM started successfully")
+        break
+    elif status in [VirtualMachine.Status.ERROR_UNSCHEDULABLE, 
+                    VirtualMachine.Status.DATAVOLUME_ERROR]:
+        print(f"VM failed to start: {status}")
+        break
+    
+    time.sleep(5)
+```
+
+## Best Practices
+
+1. **Use Appropriate Run Strategies**: Choose the right run strategy for your use case
+2. **Set Proper Timeouts**: VM operations can be slow; set generous timeouts
+3. **Wait for VMI**: Always wait for VMI to be running before accessing it
+4. **Resource Limits**: Define appropriate CPU and memory limits
+5. **Handle Errors**: Wrap VM operations in try-except blocks
+6. **Check Status**: Monitor VM status during operations
+7. **Clean Up**: Always clean up test VMs to free resources
+
+## Related Resources
+
+- [Resource CRUD Operations](/guides/resource-crud-operations)
+- [Working with Pods](/guides/working-with-pods)
+- [Logging Configuration](/guides/logging-configuration)

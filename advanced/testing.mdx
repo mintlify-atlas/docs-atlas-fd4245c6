@@ -1,0 +1,612 @@
+---
+title: Testing
+description: Comprehensive testing patterns for Kubernetes and OpenShift applications
+icon: vial
+---
+
+Learn how to write comprehensive tests for your Kubernetes and OpenShift applications using the fake client and pytest.
+
+## Testing Architecture
+
+The openshift-python-wrapper provides a complete testing framework built on:
+
+<CardGroup cols={3}>
+
+<Card title="Fake Client" icon="server">
+Mock Kubernetes API for testing without a cluster
+</Card>
+
+<Card title="Pytest" icon="flask">
+Powerful testing framework with fixtures and markers
+</Card>
+
+<Card title="Incremental Tests" icon="arrows-rotate">
+Skip dependent tests when previous tests fail
+</Card>
+
+</CardGroup>
+
+## Setting Up Test Fixtures
+
+### Basic Fixture Configuration
+
+Create a `conftest.py` file with shared fixtures:
+
+```python conftest.py
+import pytest
+from ocp_resources.resource import get_client
+
+@pytest.fixture(scope="class")
+def fake_client():
+    """Fixture that provides a fake client for testing"""
+    return get_client(fake=True)
+```
+
+### Resource Fixtures
+
+Create reusable resource fixtures:
+
+```python conftest.py
+from ocp_resources.namespace import Namespace
+from ocp_resources.pod import Pod
+
+@pytest.fixture(scope="class")
+def namespace(fake_client):
+    """Create a test namespace"""
+    return Namespace(client=fake_client, name="test-namespace")
+
+@pytest.fixture(scope="class")
+def pod(fake_client):
+    """Create a test pod with cleanup"""
+    test_pod = Pod(
+        client=fake_client,
+        name="test-pod",
+        namespace="default",
+        containers=[{"name": "test-container", "image": "nginx:latest"}],
+    )
+    deployed_pod = test_pod.deploy()
+    yield deployed_pod
+    # Cleanup after tests
+    test_pod.clean_up()
+```
+
+## Basic Test Patterns
+
+### CRUD Operations
+
+Test the complete lifecycle of a resource:
+
+```python test_namespace.py
+import pytest
+from ocp_resources.namespace import Namespace
+
+@pytest.mark.incremental
+class TestNamespace:
+    @pytest.fixture(scope="class")
+    def namespace(self, fake_client):
+        return Namespace(
+            client=fake_client,
+            name="test-namespace",
+        )
+
+    def test_01_create_namespace(self, namespace):
+        """Test creating Namespace"""
+        deployed_resource = namespace.deploy()
+        assert deployed_resource
+        assert deployed_resource.name == "test-namespace"
+        assert namespace.exists
+
+    def test_02_get_namespace(self, namespace):
+        """Test getting Namespace"""
+        assert namespace.instance
+        assert namespace.kind == "Namespace"
+
+    def test_03_update_namespace(self, namespace):
+        """Test updating Namespace"""
+        resource_dict = namespace.instance.to_dict()
+        resource_dict["metadata"]["labels"] = {"updated": "true"}
+        namespace.update(resource_dict=resource_dict)
+        assert namespace.labels["updated"] == "true"
+
+    def test_04_delete_namespace(self, namespace):
+        """Test deleting Namespace"""
+        namespace.clean_up(wait=False)
+        assert not namespace.exists
+```
+
+<Note>
+The `@pytest.mark.incremental` marker ensures that if a test fails, subsequent tests in the class are skipped.
+</Note>
+
+### Testing Pods
+
+```python test_pod.py
+import pytest
+from ocp_resources.pod import Pod
+
+@pytest.mark.incremental
+class TestPod:
+    @pytest.fixture(scope="class")
+    def pod(self, fake_client):
+        return Pod(
+            client=fake_client,
+            name="test-pod",
+            namespace="default",
+            containers=[{"name": "test-container", "image": "nginx:latest"}],
+        )
+
+    def test_01_create_pod(self, pod):
+        """Test creating Pod"""
+        deployed_resource = pod.deploy()
+        assert deployed_resource
+        assert deployed_resource.name == "test-pod"
+        assert pod.exists
+
+    def test_02_get_pod(self, pod):
+        """Test getting Pod"""
+        assert pod.instance
+        assert pod.kind == "Pod"
+        assert pod.status == Pod.Status.RUNNING
+
+    def test_03_update_pod(self, pod):
+        """Test updating Pod"""
+        resource_dict = pod.instance.to_dict()
+        resource_dict["metadata"]["labels"] = {"updated": "true"}
+        pod.update(resource_dict=resource_dict)
+        assert pod.labels["updated"] == "true"
+
+    def test_04_delete_pod(self, pod):
+        """Test deleting Pod"""
+        pod.clean_up(wait=False)
+        assert not pod.exists
+```
+
+## Advanced Test Patterns
+
+### Testing Resource Conditions
+
+Test resources that may not be immediately ready:
+
+```python test_conditions.py
+import pytest
+from ocp_resources.pod import Pod
+
+def test_wait_for_ready_condition(fake_client):
+    """Test waiting for pod to be ready"""
+    pod = Pod(
+        client=fake_client,
+        name="test-pod",
+        namespace="default",
+        containers=[{"name": "nginx", "image": "nginx:latest"}],
+    )
+    pod.deploy()
+    
+    # Wait for pod to be ready
+    pod.wait_for_condition(
+        condition=Pod.Condition.READY,
+        status=Pod.Condition.Status.TRUE,
+        timeout=30
+    )
+    
+    assert pod.exists
+    pod.clean_up()
+
+def test_not_ready_pod(fake_client):
+    """Test handling of not-ready pods"""
+    pod = Pod(
+        client=fake_client,
+        name="not-ready-pod",
+        namespace="default",
+        containers=[{"name": "app", "image": "myapp:latest"}],
+        annotations={"fake-client.io/ready": "false"}  # Pod won't be ready
+    )
+    
+    deployed = pod.deploy()
+    
+    # Verify pod is not ready
+    pod.wait_for_condition(
+        condition=Pod.Condition.READY,
+        status=Pod.Condition.Status.FALSE,
+        timeout=5
+    )
+    
+    pod.clean_up()
+```
+
+### Testing Events
+
+```python test_events.py
+def test_resource_events(fake_client):
+    """Test getting resource events"""
+    from ocp_resources.pod import Pod
+    
+    pod = Pod(
+        client=fake_client,
+        name="test-pod",
+        namespace="default",
+        containers=[{"name": "nginx", "image": "nginx:latest"}],
+    )
+    pod.deploy()
+    
+    # Get events for the pod
+    events = list(pod.events(timeout=1))
+    assert events
+    
+    pod.clean_up()
+```
+
+### Testing Resource Lists
+
+Test creating and managing multiple resources:
+
+```python test_resource_lists.py
+import pytest
+from ocp_resources.resource import ResourceList
+from ocp_resources.namespace import Namespace
+
+@pytest.mark.incremental
+class TestResourceList:
+    @pytest.fixture(scope="class")
+    def namespaces(self, fake_client):
+        return ResourceList(
+            client=fake_client,
+            resource_class=Namespace,
+            num_resources=3,
+            name="test-namespace"
+        )
+
+    def test_resource_list_deploy(self, namespaces):
+        """Test deploying multiple resources"""
+        namespaces.deploy()
+        assert namespaces
+
+    def test_resource_list_len(self, namespaces):
+        """Test resource list length"""
+        assert len(namespaces) == 3
+
+    def test_resource_list_name(self, namespaces):
+        """Test resource naming convention"""
+        for i, ns in enumerate(namespaces.resources, start=1):
+            assert ns.name == f"test-namespace-{i}"
+
+    def test_resource_list_teardown(self, namespaces):
+        """Test cleaning up multiple resources"""
+        namespaces.clean_up(wait=False)
+```
+
+### Testing Namespaced Resource Lists
+
+```python test_namespaced_lists.py
+import pytest
+from ocp_resources.resource import NamespacedResourceList
+from ocp_resources.namespace import Namespace
+from ocp_resources.pod import Pod
+
+@pytest.mark.incremental
+class TestNamespacedResourceList:
+    @pytest.fixture(scope="class")
+    def namespaces(self, fake_client):
+        return ResourceList(
+            client=fake_client,
+            resource_class=Namespace,
+            num_resources=3,
+            name="test-namespace"
+        )
+
+    @pytest.fixture(scope="class")
+    def pods(self, fake_client, namespaces):
+        return NamespacedResourceList(
+            client=fake_client,
+            resource_class=Pod,
+            namespaces=namespaces,
+            name="test-pod",
+            containers=[{"name": "test-container", "image": "nginx:latest"}],
+        )
+
+    def test_namespaced_resource_list_deploy(self, pods):
+        """Test deploying pods across namespaces"""
+        pods.deploy()
+        assert pods
+
+    def test_resource_list_len(self, namespaces, pods):
+        """Test one pod per namespace"""
+        assert len(pods) == len(namespaces)
+
+    def test_namespaced_resource_list_namespace(self, namespaces, pods):
+        """Test pod namespace assignment"""
+        for pod, namespace in zip(pods.resources, namespaces, strict=False):
+            assert pod.namespace == namespace.name
+
+    def test_resource_list_teardown(self, pods):
+        """Test cleanup"""
+        pods.clean_up(wait=False)
+```
+
+## Context Manager Testing
+
+### Resource Context Manager
+
+Test automatic cleanup with context managers:
+
+```python test_context_manager.py
+def test_resource_context_manager(fake_client):
+    """Test resource cleanup with context manager"""
+    from ocp_resources.secret import Secret
+    
+    with Secret(name="test-secret", namespace="default", client=fake_client) as sec:
+        assert sec.exists
+    
+    # Secret should be cleaned up after context
+    assert not sec.exists
+
+def test_resource_list_context_manager(fake_client):
+    """Test resource list with context manager"""
+    from ocp_resources.resource import ResourceList
+    from ocp_resources.namespace import Namespace
+    
+    with ResourceList(
+        client=fake_client,
+        resource_class=Namespace,
+        name="test-namespace",
+        num_resources=3
+    ) as namespaces:
+        assert len(namespaces) == 3
+        for ns in namespaces.resources:
+            assert ns.exists
+```
+
+### Testing Teardown Errors
+
+```python test_teardown_errors.py
+import pytest
+from ocp_resources.exceptions import ResourceTeardownError
+from ocp_resources.secret import Secret
+
+class SecretTestExit(Secret):
+    """Custom secret that fails to clean up"""
+    def deploy(self, wait: bool = False):
+        return self
+
+    def clean_up(self, wait: bool = True, timeout: int | None = None) -> bool:
+        return False
+
+def test_resource_context_manager_exit(fake_client):
+    """Test context manager with teardown failure"""
+    with pytest.raises(ResourceTeardownError):
+        with SecretTestExit(
+            name="test-secret-exit",
+            namespace="default",
+            client=fake_client
+        ):
+            pass
+```
+
+## Testing Complete Applications
+
+Test full application deployments:
+
+```python test_application.py
+import pytest
+from ocp_resources.namespace import Namespace
+from ocp_resources.deployment import Deployment
+from ocp_resources.service import Service
+
+@pytest.mark.incremental
+class TestApplicationDeployment:
+    """Test complete application deployment"""
+    
+    @pytest.fixture(scope="class")
+    def namespace(self, fake_client):
+        ns = Namespace(client=fake_client, name="my-app")
+        ns.deploy()
+        yield ns
+        ns.clean_up()
+    
+    def test_deploy_deployment(self, fake_client, namespace):
+        """Test deploying application"""
+        deployment = Deployment(
+            client=fake_client,
+            name="backend",
+            namespace=namespace.name,
+            replicas=3,
+            containers=[{
+                "name": "api",
+                "image": "myapp/backend:v1.0",
+                "ports": [{"containerPort": 8080}]
+            }],
+            labels={"app": "backend"}
+        )
+        
+        deployed = deployment.deploy()
+        assert deployed.exists
+        assert deployed.instance.spec.replicas == 3
+        
+        deployment.clean_up()
+    
+    def test_deploy_service(self, fake_client, namespace):
+        """Test deploying service"""
+        service = Service(
+            client=fake_client,
+            name="backend-service",
+            namespace=namespace.name,
+            selector={"app": "backend"},
+            ports=[{"port": 80, "targetPort": 8080}]
+        )
+        
+        deployed = service.deploy()
+        assert deployed.exists
+        assert deployed.spec.selector["app"] == "backend"
+        
+        service.clean_up()
+```
+
+## Testing Best Practices
+
+<AccordionGroup>
+
+<Accordion title="Use Incremental Tests">
+Mark test classes with `@pytest.mark.incremental` to skip subsequent tests when a test fails:
+
+```python
+@pytest.mark.incremental
+class TestResource:
+    def test_01_create(self):
+        pass
+    
+    def test_02_update(self):
+        # Skipped if test_01_create fails
+        pass
+```
+</Accordion>
+
+<Accordion title="Use Descriptive Test Names">
+Prefix tests with numbers to ensure execution order:
+
+```python
+def test_01_create_resource(self):
+    """Test creating resource"""
+    pass
+
+def test_02_update_resource(self):
+    """Test updating resource"""
+    pass
+```
+</Accordion>
+
+<Accordion title="Clean Up Resources">
+Always clean up resources in fixtures or tests:
+
+```python
+@pytest.fixture(scope="class")
+def pod(fake_client):
+    pod = Pod(...)
+    deployed = pod.deploy()
+    yield deployed
+    pod.clean_up()  # Always clean up
+```
+</Accordion>
+
+<Accordion title="Test Error Conditions">
+Test both success and failure scenarios:
+
+```python
+def test_not_ready_resource(fake_client):
+    resource = Resource(
+        ...,
+        annotations={"fake-client.io/ready": "false"}
+    )
+    deployed = resource.deploy()
+    
+    with pytest.raises(TimeoutError):
+        resource.wait_for_condition(..., timeout=5)
+```
+</Accordion>
+
+<Accordion title="Use Class-scoped Fixtures">
+Share expensive setup across tests:
+
+```python
+@pytest.fixture(scope="class")
+def namespace(fake_client):
+    # Created once per test class
+    ns = Namespace(...)
+    ns.deploy()
+    yield ns
+    ns.clean_up()
+```
+</Accordion>
+
+</AccordionGroup>
+
+## Running Tests
+
+<Tabs>
+
+<Tab title="Run All Tests">
+```bash
+pytest tests/
+```
+</Tab>
+
+<Tab title="Run Specific Test File">
+```bash
+pytest tests/test_resources/test_pod.py
+```
+</Tab>
+
+<Tab title="Run Specific Test Class">
+```bash
+pytest tests/test_resources/test_pod.py::TestPod
+```
+</Tab>
+
+<Tab title="Run With Verbosity">
+```bash
+pytest -v tests/
+```
+</Tab>
+
+<Tab title="Run With Coverage">
+```bash
+pytest --cov=ocp_resources tests/
+```
+</Tab>
+
+</Tabs>
+
+## Debugging Tests
+
+### Print Debug Information
+
+```python
+def test_debug_resource(fake_client):
+    from ocp_resources.pod import Pod
+    
+    pod = Pod(...)
+    deployed = pod.deploy()
+    
+    # Debug output
+    print(f"Pod name: {pod.name}")
+    print(f"Pod namespace: {pod.namespace}")
+    print(f"Pod status: {pod.status}")
+    print(f"Pod labels: {pod.labels}")
+    
+    assert deployed.exists
+```
+
+### Use pytest.set_trace()
+
+```python
+def test_debug_with_breakpoint(fake_client):
+    from ocp_resources.pod import Pod
+    
+    pod = Pod(...)
+    deployed = pod.deploy()
+    
+    # Set breakpoint for debugging
+    pytest.set_trace()
+    
+    assert deployed.exists
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Fake Client" href="./fake-client" icon="server">
+Learn more about the fake Kubernetes client
+</Card>
+
+<Card title="Class Generator" href="./class-generator" icon="code">
+Generate wrapper classes for testing
+</Card>
+
+<Card title="Examples" href="../examples/basic-usage" icon="book">
+Explore more testing examples
+</Card>
+
+<Card title="API Reference" href="../api-reference/introduction" icon="book-open">
+Complete API documentation
+</Card>
+
+</CardGroup>

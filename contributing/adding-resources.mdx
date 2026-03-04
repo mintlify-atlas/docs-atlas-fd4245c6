@@ -1,0 +1,356 @@
+---
+title: Adding Resources
+description: Guide to adding new Kubernetes and OpenShift resources
+---
+
+OpenShift Python Wrapper provides tools to easily add support for new Kubernetes and OpenShift resources. You can use the automated class generator or add resources manually.
+
+## Using the Class Generator (Recommended)
+
+The class generator automatically creates resource classes from Kubernetes API schemas.
+
+### Installation
+
+The class generator is included when you install openshift-python-wrapper:
+
+```bash
+uv tool install openshift-python-wrapper
+```
+
+Or with pip:
+```bash
+python3 -m pip install openshift-python-wrapper
+```
+
+### Shell Completion
+
+Add shell completion to your shell configuration (~/.bashrc or ~/.zshrc):
+
+```bash
+if type class-generator > /dev/null; then 
+  eval "$(_CLASS_GENERATOR_COMPLETE=zsh_source class-generator)"
+fi
+```
+
+### Basic Usage
+
+Generate a class for a specific resource kind:
+
+```bash
+class-generator --kind Pod
+```
+
+Generate multiple resources at once:
+
+```bash
+class-generator --kind Pod,Service,Deployment
+```
+
+Preview the generated code without writing files:
+
+```bash
+class-generator --kind Pod --dry-run
+```
+
+### File Naming
+
+The generator creates files in `ocp_resources/` with snake_case naming:
+
+- `Pod` → `pod.py`
+- `CDIConfig` → `cdi_config.py`
+- `VirtualMachine` → `virtual_machine.py`
+
+**Important**: Review the generated filename to ensure it follows Python naming conventions.
+
+### Handling Duplicate Kinds
+
+Some resources share the same kind but have different API groups. The generator handles this by including the API group in the filename:
+
+```bash
+class-generator --kind DNS
+```
+
+This creates two files:
+- `dns_config_openshift_io.py` (from config.openshift.io)
+- `dns_operator_openshift_io.py` (from operator.openshift.io)
+
+## Overwriting Existing Resources
+
+When updating or regenerating resources, use the `--overwrite` flag with `--backup` to safely preserve the original:
+
+```bash
+class-generator --kind Pod --overwrite --backup
+```
+
+Backups are stored in `.backups/backup-YYYYMMDD-HHMMSS/` with the original directory structure preserved.
+
+### Batch Regeneration
+
+Regenerate all resources with backups:
+
+```bash
+class-generator --regenerate-all --backup
+```
+
+## Discovering Missing Resources
+
+The class generator can automatically discover resources in your cluster that don't have wrapper classes yet.
+
+### Basic Discovery
+
+Generate a coverage report showing missing resources:
+
+```bash
+class-generator --discover-missing
+```
+
+### Example Output
+
+```text
+Resource Coverage Report
+
+╭─────────────────────────── Coverage Statistics ────────────────────────────╮
+│ Total Discovered Resources: 397                                             │
+│ Total Implemented: 197                                                      │
+│ Covered Resources: 172                                                      │
+│ Total Missing: 225                                                          │
+│ Coverage Percentage: 43.32%                                                 │
+╰─────────────────────────────────────────────────────────────────────────────╯
+
+Missing Resources (sorted by priority)
+
+┏━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Priority   ┃ Kind            ┃ API Version          ┃ Namespaced ┃ Command                       ┃
+┡━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ CORE       │ Binding         │ v1                   │ Yes        │ class-generator -k Binding    │
+│ HIGH       │ PodTemplate     │ v1                   │ Yes        │ class-generator -k PodTemplate│
+└────────────┴─────────────────┴──────────────────────┴────────────┴───────────────────────────────┘
+
+Tip: You can generate multiple resources at once:
+  class-generator -k Binding,PodTemplate
+```
+
+### Priority Levels
+
+- **CORE**: Essential Kubernetes resources (v1 API group)
+- **HIGH**: Common workload resources (apps/v1, batch/v1)
+- **MEDIUM**: Platform-specific resources (OpenShift, operators)
+- **LOW**: Custom resources and less common APIs
+
+### Discovery Options
+
+JSON output for CI/CD integration:
+```bash
+class-generator --discover-missing --json
+```
+
+Force fresh discovery (bypass cache):
+```bash
+class-generator --discover-missing --no-cache
+```
+
+### Caching
+
+Discovery results are cached for 24 hours in:
+```
+~/.cache/openshift-python-wrapper/discovery_cache.json
+```
+
+This improves performance for repeated discoveries.
+
+## Updating Resource Schemas
+
+Resource schemas can be updated from a connected Kubernetes/OpenShift cluster.
+
+### Prerequisites
+
+- Connected to a Kubernetes/OpenShift cluster
+- [oc](https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/stable/) or [kubectl](https://kubernetes.io/docs/tasks/tools/)
+- Admin access to the cluster
+
+### Full Schema Update
+
+Update all resource schemas from your cluster:
+
+```bash
+class-generator --update-schema
+```
+
+This fetches all resource schemas and updates the local cache. When connected to an older cluster, existing schemas are preserved and only missing resources are added.
+
+### Single Resource Schema Update
+
+Update the schema for a specific resource:
+
+```bash
+class-generator --update-schema-for VirtualMachine
+```
+
+This is useful when:
+- Connected to an older cluster but need a specific CRD
+- A new operator was installed
+- You want to refresh one resource without a full update
+
+After updating the schema, regenerate the class:
+
+```bash
+class-generator --kind VirtualMachine --overwrite
+```
+
+<Note>
+`--update-schema` and `--update-schema-for` are mutually exclusive. Use one or the other, not both.
+</Note>
+
+## Manual Resource Creation
+
+If you need more control or the generator doesn't fit your needs, you can create resources manually.
+
+### Resource File Structure
+
+Create a new file in `ocp_resources/` following these rules:
+
+1. **File naming**: Use snake_case (e.g., `config_map.py` for ConfigMap)
+2. **Class naming**: Match the resource kind exactly
+3. **Inheritance**:
+   - Cluster-scoped resources: inherit from `Resource`
+   - Namespaced resources: inherit from `NamespacedResource`
+
+### Example: Namespaced Resource
+
+```python ocp_resources/config_map.py
+from typing import Any
+
+from ocp_resources.resource import NamespacedResource
+
+
+class ConfigMap(NamespacedResource):
+    """
+    ConfigMap resource.
+    
+    API reference:
+    https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/config-map-v1/
+    """
+
+    api_group = NamespacedResource.ApiGroup.CORE_V1
+
+    def __init__(
+        self,
+        name: str | None = None,
+        namespace: str | None = None,
+        data: dict[str, str] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(name=name, namespace=namespace, **kwargs)
+        self.data = data
+
+    def to_dict(self) -> dict[str, Any]:
+        res = super().to_dict()
+        if self.data:
+            res["data"] = self.data
+        return res
+```
+
+### Example: Cluster-scoped Resource
+
+```python ocp_resources/backup.py
+from typing import Any
+
+from ocp_resources.resource import Resource
+
+
+class Backup(Resource):
+    """
+    Backup resource from velero.io.
+    
+    API reference:
+    https://velero.io/docs/main/api-types/backup/
+    """
+
+    api_group = Resource.ApiGroup.VELERO_IO
+
+    def __init__(
+        self,
+        name: str | None = None,
+        included_namespaces: list[str] | None = None,
+        storage_location: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(name=name, **kwargs)
+        self.included_namespaces = included_namespaces
+        self.storage_location = storage_location
+
+    def to_dict(self) -> dict[str, Any]:
+        res = super().to_dict()
+        if self.yaml_file:
+            return res
+
+        spec = res.setdefault("spec", {})
+        if self.included_namespaces:
+            spec["includedNamespaces"] = self.included_namespaces
+        if self.storage_location:
+            spec["storageLocation"] = self.storage_location
+        return res
+```
+
+### Required Components
+
+1. **API Group**: Define under `Resource.ApiGroup` or `NamespacedResource.ApiGroup`
+2. **API Reference**: Include a link to the official API documentation
+3. **`__init__` method**: Define required and optional parameters
+4. **`to_dict` method**: Convert the resource to a dictionary for API calls
+
+### Best Practices
+
+- Add type hints to all methods and parameters
+- Include docstrings explaining the resource purpose
+- Link to official API documentation
+- Only include required and commonly used parameters in `__init__`
+- Handle optional parameters with `None` defaults
+
+## Adding Tests
+
+After creating a resource, add tests using the test generator:
+
+```bash
+class-generator --kind YourResource --add-tests
+```
+
+Or use the standalone test generator:
+
+```bash
+uv run tests/scripts/generate_pytest_test.py --kind YourResource
+```
+
+See [Testing](/contributing/testing) for more details.
+
+## Verification
+
+After adding a resource:
+
+1. **Run pre-commit checks**:
+   ```bash
+   prek run --all-files
+   ```
+
+2. **Run tests**:
+   ```bash
+   uv run --group tests pytest tests/test_resources/test_your_resource.py
+   ```
+
+3. **Test in your environment**:
+   ```python
+   from ocp_resources.your_resource import YourResource
+   
+   resource = YourResource(name="test", namespace="default")
+   resource.deploy()
+   ```
+
+## Getting Help
+
+For help with the class generator:
+
+```bash
+class-generator --help
+```
+
+For questions or issues, [open an issue](https://github.com/RedHatQE/openshift-python-wrapper/issues) on GitHub.

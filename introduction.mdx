@@ -1,0 +1,266 @@
+---
+title: Introduction
+description: A powerful Python wrapper for Kubernetes and OpenShift with first-class support for Container Virtualization
+---
+
+<div className="relative overflow-hidden dark:bg-[#0f1117] bg-white py-20">
+  <div className="max-w-7xl mx-auto px-6 lg:px-8">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+      <div className="lg:col-span-7">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold dark:text-white text-gray-900 mb-6">
+          OpenShift Python Wrapper
+        </h1>
+        <p className="text-lg sm:text-xl dark:text-gray-400 text-gray-600 max-w-2xl mb-8">
+          A Python wrapper for the Kubernetes client with support for OpenShift and Container Virtualization. Standardize resource operations with a simple, intuitive interface.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a
+            href="/quickstart"
+            className="inline-flex items-center justify-center px-6 py-3 text-base font-medium rounded-lg transition-colors bg-[#fbd342] text-gray-900 hover:bg-[#f5c91e]"
+          >
+            Get Started
+          </a>
+          <a
+            href="/api-reference/resource"
+            className="inline-flex items-center justify-center px-6 py-3 text-base font-medium rounded-lg transition-colors border dark:border-white/30 dark:bg-white/10 border-gray-300 bg-gray-100 dark:text-white text-gray-900 dark:hover:bg-white/20 hover:bg-gray-200"
+          >
+            API Reference
+          </a>
+        </div>
+      </div>
+      <div className="lg:col-span-5 hidden lg:block">
+        <div className="relative">
+          <div className="dark:bg-[#1a1d27] bg-gray-50 rounded-2xl p-6 border dark:border-[#27272a] border-gray-200">
+            <pre className="text-sm overflow-x-auto">
+              <code className="dark:text-gray-300 text-gray-800">
+{`from ocp_resources.pod import Pod
+
+# Create a pod with context manager
+with Pod(
+    name="my-pod",
+    namespace="default",
+    containers=[{
+        "name": "nginx",
+        "image": "nginx:latest"
+    }]
+) as pod:
+    pod.wait_for_status(
+        status="Running",
+        timeout=300
+    )
+    # Pod automatically cleaned up`}
+              </code>
+            </pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-bold dark:text-white text-gray-900 mb-4">
+    Quick Start
+  </h2>
+  <p className="text-base dark:text-gray-400 text-gray-600 mb-8">
+    Get up and running with OpenShift Python Wrapper in minutes
+  </p>
+
+  <Steps>
+    <Step title="Install the package">
+      Install using pip or uv:
+
+      <CodeGroup>
+      ```bash pip
+      pip install openshift-python-wrapper
+      ```
+
+      ```bash uv
+      uv pip install openshift-python-wrapper
+      ```
+      </CodeGroup>
+    </Step>
+
+    <Step title="Configure cluster access">
+      Ensure you have a valid kubeconfig file with access to your cluster:
+
+      ```bash
+      export KUBECONFIG=~/.kube/config
+      kubectl cluster-info
+      ```
+
+      The wrapper uses your existing Kubernetes configuration automatically.
+    </Step>
+
+    <Step title="Create your first resource">
+      Create a Pod using the wrapper's intuitive interface:
+
+      ```python
+      from ocp_resources.pod import Pod
+
+      pod = Pod(
+          name="nginx-pod",
+          namespace="default",
+          containers=[{
+              "name": "nginx",
+              "image": "nginx:latest"
+          }]
+      )
+      pod.deploy()
+      pod.wait_for_status(status="Running")
+
+      print(f"Pod {pod.name} is running!")
+      ```
+
+      <Accordion title="Expected output">
+        ```
+        Pod nginx-pod is running!
+        ```
+      </Accordion>
+    </Step>
+
+    <Step title="Execute commands in containers">
+      The wrapper provides simplified access to pod operations:
+
+      ```python
+      # Execute a command inside the pod
+      result = pod.execute(command=["nginx", "-v"])
+      print(result)
+
+      # Get logs
+      logs = pod.log()
+      print(logs)
+      ```
+    </Step>
+  </Steps>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-bold dark:text-white text-gray-900 mb-4">
+    Key Features
+  </h2>
+  <p className="text-base dark:text-gray-400 text-gray-600 mb-8">
+    Everything you need to work with Kubernetes and OpenShift resources
+  </p>
+
+  <CardGroup cols={2}>
+    <Card title="Unified CRUD Interface" icon="layer-group" href="/guides/resource-crud-operations">
+      Standardized Create, Read, Update, and Delete operations for all resource types
+    </Card>
+    <Card title="Context Managers" icon="arrows-rotate" href="/core-concepts/context-managers">
+      Automatic resource lifecycle management with Python context managers
+    </Card>
+    <Card title="OpenShift Virtualization" icon="server" href="/guides/virtual-machines">
+      First-class support for KubeVirt and Container Virtualization resources
+    </Card>
+    <Card title="Pod Operations" icon="terminal" href="/guides/working-with-pods">
+      Execute commands, stream logs, and interact with containers easily
+    </Card>
+    <Card title="Class Generator" icon="wand-magic-sparkles" href="/advanced/class-generator">
+      Auto-generate wrapper classes for any Kubernetes resource
+    </Card>
+    <Card title="Fake Client" icon="flask" href="/advanced/fake-client">
+      Test your code without a real cluster using the fake Kubernetes client
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-bold dark:text-white text-gray-900 mb-4">
+    Explore by Topic
+  </h2>
+  <p className="text-base dark:text-gray-400 text-gray-600 mb-8">
+    Deep dive into specific areas of the wrapper
+  </p>
+
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <a href="/core-concepts/resources" className="group block rounded-2xl border dark:border-[#27272a] border-gray-200 dark:hover:border-[#fbd342] hover:border-[#fbd342] overflow-hidden no-underline transition-colors">
+      <div className="h-56 dark:bg-[#1a1d27] bg-gray-50 flex items-center justify-center overflow-hidden">
+        <div className="text-6xl">📦</div>
+      </div>
+      <div className="p-6 dark:bg-[#1a1d27] bg-white">
+        <h3 className="text-base font-semibold dark:text-white text-gray-900 mb-2">Core Concepts</h3>
+        <p className="text-sm dark:text-gray-400 text-gray-600 mb-3">
+          Understand resources, namespaces, and client configuration
+        </p>
+        <div className="flex items-center text-sm dark:text-gray-400 text-gray-600 dark:group-hover:text-[#fbd342] group-hover:text-[#fbd342] transition-colors">
+          Learn more
+          <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    </a>
+
+    <a href="/guides/working-with-pods" className="group block rounded-2xl border dark:border-[#27272a] border-gray-200 dark:hover:border-[#fbd342] hover:border-[#fbd342] overflow-hidden no-underline transition-colors">
+      <div className="h-56 dark:bg-[#1a1d27] bg-gray-50 flex items-center justify-center overflow-hidden">
+        <div className="text-6xl">🐳</div>
+      </div>
+      <div className="p-6 dark:bg-[#1a1d27] bg-white">
+        <h3 className="text-base font-semibold dark:text-white text-gray-900 mb-2">Working with Pods</h3>
+        <p className="text-sm dark:text-gray-400 text-gray-600 mb-3">
+          Execute commands, stream logs, and manage container lifecycles
+        </p>
+        <div className="flex items-center text-sm dark:text-gray-400 text-gray-600 dark:group-hover:text-[#fbd342] group-hover:text-[#fbd342] transition-colors">
+          Learn more
+          <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    </a>
+
+    <a href="/guides/virtual-machines" className="group block rounded-2xl border dark:border-[#27272a] border-gray-200 dark:hover:border-[#fbd342] hover:border-[#fbd342] overflow-hidden no-underline transition-colors">
+      <div className="h-56 dark:bg-[#1a1d27] bg-gray-50 flex items-center justify-center overflow-hidden">
+        <div className="text-6xl">💻</div>
+      </div>
+      <div className="p-6 dark:bg-[#1a1d27] bg-white">
+        <h3 className="text-base font-semibold dark:text-white text-gray-900 mb-2">Virtual Machines</h3>
+        <p className="text-sm dark:text-gray-400 text-gray-600 mb-3">
+          Manage KubeVirt virtual machines and OpenShift Virtualization
+        </p>
+        <div className="flex items-center text-sm dark:text-gray-400 text-gray-600 dark:group-hover:text-[#fbd342] group-hover:text-[#fbd342] transition-colors">
+          Learn more
+          <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    </a>
+
+    <a href="/advanced/class-generator" className="group block rounded-2xl border dark:border-[#27272a] border-gray-200 dark:hover:border-[#fbd342] hover:border-[#fbd342] overflow-hidden no-underline transition-colors">
+      <div className="h-56 dark:bg-[#1a1d27] bg-gray-50 flex items-center justify-center overflow-hidden">
+        <div className="text-6xl">⚙️</div>
+      </div>
+      <div className="p-6 dark:bg-[#1a1d27] bg-white">
+        <h3 className="text-base font-semibold dark:text-white text-gray-900 mb-2">Class Generator</h3>
+        <p className="text-sm dark:text-gray-400 text-gray-600 mb-3">
+          Auto-generate Python wrappers for any Kubernetes custom resource
+        </p>
+        <div className="flex items-center text-sm dark:text-gray-400 text-gray-600 dark:group-hover:text-[#fbd342] group-hover:text-[#fbd342] transition-colors">
+          Learn more
+          <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="dark:bg-[#1a1d27] bg-gray-50 rounded-2xl p-8 border dark:border-[#27272a] border-gray-200">
+    <h2 className="text-2xl font-bold dark:text-white text-gray-900 mb-4">
+      Ready to get started?
+    </h2>
+    <p className="text-base dark:text-gray-400 text-gray-600 mb-6">
+      Install the package and create your first resource in minutes
+    </p>
+    <a
+      href="/quickstart"
+      className="inline-flex items-center justify-center px-6 py-3 text-base font-medium rounded-lg transition-colors bg-[#fbd342] text-gray-900 hover:bg-[#f5c91e]"
+    >
+      View Quickstart Guide
+    </a>
+  </div>
+</div>

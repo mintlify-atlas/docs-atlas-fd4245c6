@@ -1,0 +1,405 @@
+---
+title: Exceptions
+description: Exception classes for error handling in OpenShift Python Wrapper
+---
+
+## Overview
+
+The exceptions module defines custom exception classes for handling various error conditions when working with Kubernetes and OpenShift resources.
+
+---
+
+## MissingRequiredArgumentError
+
+Raised when a required argument is not provided to a resource constructor.
+
+```python
+from ocp_resources.exceptions import MissingRequiredArgumentError
+from ocp_resources import Pod
+
+try:
+    # This will raise MissingRequiredArgumentError
+    pod = Pod(client=client)
+except MissingRequiredArgumentError as e:
+    print(f"Error: {e}")
+    # Error: Missing required argument/s. Either provide yaml_file, kind_dict or pass name
+```
+
+### Attributes
+
+<ResponseField name="argument" type="str">
+  The name of the missing required argument.
+</ResponseField>
+
+---
+
+## MissingResourceError
+
+Raised when a resource fails to generate or cannot be created from provided parameters.
+
+```python
+from ocp_resources.exceptions import MissingResourceError
+
+try:
+    # Code that fails to generate a resource
+    raise MissingResourceError(name="my-pod")
+except MissingResourceError as e:
+    print(f"Error: {e}")
+    # Error: Failed to generate resource: my-pod
+```
+
+### Attributes
+
+<ResponseField name="resource_name" type="str">
+  The name of the resource that failed to generate.
+</ResponseField>
+
+---
+
+## MissingResourceResError
+
+<Warning>
+  **Deprecated**: This exception is deprecated and will be removed in a future release. Use `MissingResourceError` instead.
+</Warning>
+
+Legacy exception for missing resource generation. Use `MissingResourceError` for new code.
+
+```python
+from ocp_resources.exceptions import MissingResourceResError
+
+# This will emit a DeprecationWarning
+try:
+    raise MissingResourceResError(name="my-resource")
+except MissingResourceResError as e:
+    print(f"Error: {e}")
+```
+
+---
+
+## MissingTemplateVariables
+
+Raised when required template variables are not provided for resource templating.
+
+```python
+from ocp_resources.exceptions import MissingTemplateVariables
+
+try:
+    # Template processing fails due to missing variables
+    raise MissingTemplateVariables(
+        var="IMAGE_TAG",
+        template="deployment-template.yaml"
+    )
+except MissingTemplateVariables as e:
+    print(f"Error: {e}")
+    # Error: Missing variables IMAGE_TAG for template deployment-template.yaml
+```
+
+### Attributes
+
+<ResponseField name="var" type="str">
+  The name of the missing variable.
+</ResponseField>
+
+<ResponseField name="template" type="str">
+  The name or path of the template requiring the variable.
+</ResponseField>
+
+---
+
+## ExecOnPodError
+
+Raised when a command execution fails inside a pod.
+
+```python
+from ocp_resources.exceptions import ExecOnPodError
+from ocp_resources import Pod
+
+pod = Pod(client=client, name="my-pod", namespace="default")
+
+try:
+    result = pod.execute(command=["ls", "/nonexistent"])
+except ExecOnPodError as e:
+    print(f"Command failed: {e.cmd}")
+    print(f"Return code: {e.rc}")
+    print(f"Output: {e.out}")
+    print(f"Error: {e.err}")
+```
+
+### Attributes
+
+<ResponseField name="cmd" type="list[str]">
+  The command that was executed and failed.
+</ResponseField>
+
+<ResponseField name="rc" type="int">
+  The return code from the failed command.
+</ResponseField>
+
+<ResponseField name="out" type="str">
+  Standard output from the command.
+</ResponseField>
+
+<ResponseField name="err" type="Any">
+  Standard error output or error details from the command.
+</ResponseField>
+
+---
+
+## ValidationError
+
+Raised when resource validation against the OpenAPI schema fails.
+
+```python
+from ocp_resources.exceptions import ValidationError
+from ocp_resources import Pod
+
+pod = Pod(
+    client=client,
+    name="invalid-pod",
+    namespace="default",
+    schema_validation_enabled=True
+)
+
+try:
+    # This might raise ValidationError if the pod spec is invalid
+    pod.create()
+except ValidationError as e:
+    print(f"Validation failed: {e}")
+    print(f"Path: {e.path}")
+    print(f"Message: {e.message}")
+```
+
+### Attributes
+
+<ResponseField name="message" type="str">
+  Human-readable error message describing the validation failure.
+</ResponseField>
+
+<ResponseField name="path" type="str">
+  JSONPath to the invalid field (e.g., "spec.containers[0].image").
+</ResponseField>
+
+<ResponseField name="schema_error" type="Any">
+  Original jsonschema validation error object for debugging.
+</ResponseField>
+
+### Example with Path Information
+
+```python
+from ocp_resources.exceptions import ValidationError
+
+try:
+    # Validation fails on a specific field
+    raise ValidationError(
+        message="Invalid value for field",
+        path="spec.containers[0].resources.limits.memory"
+    )
+except ValidationError as e:
+    if e.path:
+        print(f"Validation error at '{e.path}': {e.message}")
+    else:
+        print(f"Validation error: {e.message}")
+```
+
+---
+
+## ConditionError
+
+Raised when a resource condition reaches an unexpected state during waiting operations.
+
+```python
+from ocp_resources.exceptions import ConditionError
+from ocp_resources import Deployment
+
+deployment = Deployment(client=client, name="my-app", namespace="default")
+
+try:
+    deployment.wait_for_condition(
+        condition="Available",
+        status="True",
+        timeout=300,
+        stop_condition="Failed",
+        stop_status="True"
+    )
+except ConditionError as e:
+    print(f"Deployment failed: {e}")
+```
+
+### Usage Context
+
+This exception is typically raised by:
+- `wait_for_condition()` when a stop condition is met
+- Condition monitoring operations that detect failure states
+- Resource readiness checks that encounter error conditions
+
+---
+
+## ResourceTeardownError
+
+Raised when a resource fails to be deleted or torn down properly.
+
+```python
+from ocp_resources.exceptions import ResourceTeardownError
+from ocp_resources import Namespace
+
+namespace = Namespace(client=client, name="test-ns")
+
+try:
+    namespace.clean_up()
+except ResourceTeardownError as e:
+    print(f"Failed to teardown: {e}")
+    print(f"Resource: {e.resource}")
+```
+
+### Attributes
+
+<ResponseField name="resource" type="Any">
+  The resource object that failed to be torn down.
+</ResponseField>
+
+### Context Manager Usage
+
+```python
+from ocp_resources import Pod
+from ocp_resources.exceptions import ResourceTeardownError
+
+try:
+    with Pod(
+        client=client,
+        name="test-pod",
+        namespace="default",
+        teardown=True
+    ) as pod:
+        # Use the pod
+        print(f"Pod {pod.name} is running")
+    # Pod should be deleted automatically
+except ResourceTeardownError as e:
+    print(f"Failed to delete pod: {e}")
+```
+
+---
+
+## ClientWithBasicAuthError
+
+Raised when client creation or authentication fails using basic authentication.
+
+```python
+from ocp_resources.resource import get_client
+from ocp_resources.exceptions import ClientWithBasicAuthError
+
+try:
+    client = get_client(
+        username="admin",
+        password="wrong-password",
+        host="https://api.cluster.example.com:6443"
+    )
+except ClientWithBasicAuthError as e:
+    print(f"Authentication failed: {e}")
+```
+
+### Common Causes
+
+- Missing OAuth authorization server configuration
+- Invalid credentials
+- Failed token exchange
+- Network connectivity issues
+- Incorrect cluster endpoint URL
+
+---
+
+## NNCPConfigurationFailed
+
+Raised when Node Network Configuration Policy (NNCP) configuration fails.
+
+```python
+from ocp_resources.exceptions import NNCPConfigurationFailed
+
+try:
+    # NNCP configuration operation
+    raise NNCPConfigurationFailed("Failed to apply network configuration")
+except NNCPConfigurationFailed as e:
+    print(f"NNCP configuration error: {e}")
+```
+
+### Usage
+
+This exception is specific to OpenShift network configuration operations and is typically raised when:
+- Network policies fail to apply
+- Node network configuration is invalid
+- Network attachment definitions are misconfigured
+
+---
+
+## Exception Hierarchy
+
+All custom exceptions inherit from Python's base `Exception` class:
+
+```
+Exception
+├── MissingRequiredArgumentError
+├── MissingResourceError
+├── MissingResourceResError (deprecated)
+├── MissingTemplateVariables
+├── ExecOnPodError
+├── ValidationError
+├── ConditionError
+├── ResourceTeardownError
+├── ClientWithBasicAuthError
+└── NNCPConfigurationFailed
+```
+
+## Best Practices
+
+### Specific Exception Handling
+
+Catch specific exceptions to handle different error scenarios:
+
+```python
+from ocp_resources import Pod
+from ocp_resources.exceptions import (
+    MissingRequiredArgumentError,
+    ValidationError,
+    ResourceTeardownError
+)
+
+try:
+    pod = Pod(
+        client=client,
+        name="my-pod",
+        namespace="default",
+        schema_validation_enabled=True
+    )
+    pod.deploy()
+except MissingRequiredArgumentError as e:
+    print(f"Missing required argument: {e.argument}")
+except ValidationError as e:
+    print(f"Validation failed at {e.path}: {e.message}")
+except ResourceTeardownError as e:
+    print(f"Cleanup failed for {e.resource.name}")
+except Exception as e:
+    print(f"Unexpected error: {e}")
+```
+
+### Logging and Debugging
+
+Use exception attributes for detailed logging:
+
+```python
+import logging
+from ocp_resources.exceptions import ExecOnPodError
+
+logger = logging.getLogger(__name__)
+
+try:
+    pod.execute(command=["some-command"])
+except ExecOnPodError as e:
+    logger.error(
+        f"Command execution failed",
+        extra={
+            "command": e.cmd,
+            "return_code": e.rc,
+            "stdout": e.out,
+            "stderr": e.err
+        }
+    )
+```

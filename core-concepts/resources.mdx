@@ -1,0 +1,487 @@
+---
+title: Resource Class
+description: Understanding the base Resource class and resource hierarchy
+---
+
+The `Resource` class is the foundation of the OpenShift Python Wrapper. It provides common functionality for all Kubernetes and OpenShift resources, including CRUD operations, resource management, and schema validation.
+
+## Class Hierarchy
+
+All resource classes in the wrapper follow a clear inheritance hierarchy:
+
+```python
+Resource                    # Base class for all resources
+├── NamespacedResource     # Resources that exist within a namespace
+│   ├── Pod
+│   ├── Deployment
+│   ├── Service
+│   └── ConfigMap
+└── Cluster Resources      # Cluster-wide resources
+    ├── Namespace
+    ├── ClusterRole
+    └── Node
+```
+
+## Key Attributes
+
+Every resource class has these important class-level attributes:
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `api_group` | `str` | API group for the resource (e.g., "apps", "batch") |
+| `api_version` | `str` | API version (e.g., "v1", "v1beta1") |
+| `singular_name` | `str` | Singular resource name for API calls |
+| `timeout_seconds` | `int` | Default timeout for API operations |
+| `schema_validation_enabled` | `bool` | Enable automatic validation on create/update |
+
+## Creating Resources
+
+Resources can be created in multiple ways:
+
+### From Python Objects
+
+```python
+from ocp_resources.namespace import Namespace
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Create from Python arguments
+ns = Namespace(
+    client=client,
+    name="my-namespace",
+    label={"environment": "dev"}
+)
+ns.deploy()
+```
+
+### From YAML Files
+
+```python
+from ocp_resources.deployment import Deployment
+
+# Create from YAML file
+deployment = Deployment(
+    client=client,
+    yaml_file="deployment.yaml"
+)
+deployment.deploy()
+```
+
+### From Dictionaries
+
+```python
+from ocp_resources.pod import Pod
+
+pod_dict = {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {"name": "my-pod"},
+    "spec": {
+        "containers": [{
+            "name": "nginx",
+            "image": "nginx:latest"
+        }]
+    }
+}
+
+pod = Pod(
+    client=client,
+    namespace="default",
+    kind_dict=pod_dict
+)
+pod.deploy()
+```
+
+## Resource Lifecycle
+
+### Deploy Method
+
+The `deploy()` method creates the resource on the cluster:
+
+```python
+# Basic deployment
+ns = Namespace(client=client, name="test-ns")
+ns.deploy()
+
+# Deploy and wait for resource to be ready
+ns.deploy(wait=True)
+```
+
+### Check Existence
+
+```python
+# Check if resource exists
+if ns.exists:
+    print(f"Namespace {ns.name} exists")
+
+# Get resource instance
+instance = ns.instance
+print(instance.to_dict())
+```
+
+### Update Resources
+
+```python
+# Update specific fields (merge patch)
+resource_dict = ns.instance.to_dict()
+resource_dict["metadata"]["labels"]["new-label"] = "value"
+ns.update(resource_dict=resource_dict)
+
+# Replace entire resource (removes fields not specified)
+ns.update_replace(resource_dict=resource_dict)
+```
+
+### Delete Resources
+
+```python
+# Delete immediately
+ns.delete()
+
+# Delete and wait for completion
+ns.delete(wait=True, timeout=240)
+
+# Or use clean_up method
+ns.clean_up(wait=True)
+```
+
+## Querying Resources
+
+### Get Single Resource
+
+```python
+from ocp_resources.pod import Pod
+
+# Get specific pod
+for pod in Pod.get(
+    client=client,
+    namespace="default",
+    name="my-pod"
+):
+    print(f"Found pod: {pod.name}")
+```
+
+### Get Multiple Resources
+
+```python
+# Get all pods in namespace
+for pod in Pod.get(client=client, namespace="default"):
+    print(f"Pod: {pod.name}")
+
+# Get pods with label selector
+for pod in Pod.get(
+    client=client,
+    label_selector="app=nginx"
+):
+    print(f"Pod: {pod.name} on node {pod.node.name}")
+
+# Get pods with field selector
+for pod in Pod.get(
+    client=client,
+    namespace="default",
+    field_selector="status.phase=Running"
+):
+    print(f"Running pod: {pod.name}")
+```
+
+### Get All Cluster Resources
+
+```python
+from ocp_resources.resource import Resource
+
+# Iterate through all resource types
+for resource in Resource.get_all_cluster_resources(
+    client=client,
+    label_selector="app=myapp"
+):
+    print(f"Resource: {resource.kind}/{resource.metadata.name}")
+```
+
+## Status and Conditions
+
+### Wait for Status
+
+```python
+from ocp_resources.namespace import Namespace
+
+ns = Namespace(client=client, name="test-ns")
+ns.deploy()
+
+# Wait for specific status
+ns.wait_for_status(
+    status=Namespace.Status.ACTIVE,
+    timeout=120
+)
+```
+
+### Wait for Conditions
+
+```python
+from ocp_resources.pod import Pod
+
+pod = Pod(
+    client=client,
+    namespace="default",
+    name="my-pod",
+    containers=[{"name": "nginx", "image": "nginx"}]
+)
+pod.deploy()
+
+# Wait for specific condition
+pod.wait_for_condition(
+    condition=Pod.Condition.READY,
+    status=Pod.Condition.Status.TRUE,
+    timeout=300
+)
+
+# Wait with stop condition
+pod.wait_for_condition(
+    condition=Pod.Condition.READY,
+    status=Pod.Condition.Status.TRUE,
+    stop_condition=Pod.Condition.FAILED,
+    stop_status=Pod.Condition.Status.TRUE,
+    timeout=300
+)
+```
+
+### Get Condition Messages
+
+```python
+# Get condition message
+message = pod.get_condition_message(
+    condition_type=Pod.Condition.READY,
+    condition_status=Pod.Condition.Status.TRUE
+)
+print(f"Ready condition message: {message}")
+```
+
+## Resource Events
+
+```python
+from ocp_resources.deployment import Deployment
+
+deployment = Deployment(client=client, namespace="default", name="my-app")
+
+# Get all events for this resource
+for event in deployment.events(timeout=60):
+    print(f"Event: {event.reason} - {event.message}")
+
+# Filter events by type
+for event in deployment.events(
+    field_selector="type=Warning",
+    timeout=30
+):
+    print(f"Warning: {event.message}")
+```
+
+## Watching Resources
+
+```python
+from ocp_resources.pod import Pod
+
+pod = Pod(client=client, namespace="default", name="my-pod")
+
+# Watch for changes
+for event in pod.watcher(timeout=60):
+    event_type = event['type']  # ADDED, MODIFIED, DELETED
+    obj = event['object']
+    print(f"Event: {event_type} - Pod phase: {obj.status.phase}")
+```
+
+## Schema Validation
+
+<Info>
+Schema validation ensures your resource definitions match the Kubernetes API schema before sending them to the cluster.
+</Info>
+
+### Enable Validation
+
+```python
+from ocp_resources.deployment import Deployment
+
+# Enable validation for this instance
+deployment = Deployment(
+    client=client,
+    namespace="default",
+    name="my-app",
+    schema_validation_enabled=True,  # Enable auto-validation
+    replicas=3,
+    selector={"matchLabels": {"app": "nginx"}},
+    template={
+        "metadata": {"labels": {"app": "nginx"}},
+        "spec": {
+            "containers": [{
+                "name": "nginx",
+                "image": "nginx:latest"
+            }]
+        }
+    }
+)
+
+# Validation happens automatically on create()
+deployment.create()
+```
+
+### Manual Validation
+
+```python
+# Validate before deployment
+deployment = Deployment(client=client, namespace="default", name="test")
+
+try:
+    deployment.validate()
+    deployment.deploy()
+except ValidationError as e:
+    print(f"Validation failed: {e}")
+```
+
+### Validate Dictionaries
+
+```python
+from ocp_resources.deployment import Deployment
+from ocp_resources.exceptions import ValidationError
+
+deployment_dict = {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {"name": "my-app"},
+    "spec": {
+        "replicas": 3,
+        "selector": {"matchLabels": {"app": "nginx"}}
+    }
+}
+
+try:
+    Deployment.validate_dict(deployment_dict)
+    print("Deployment definition is valid")
+except ValidationError as e:
+    print(f"Invalid: {e}")
+```
+
+## API Groups and Versions
+
+Resources are organized by API groups:
+
+```python
+from ocp_resources.deployment import Deployment
+from ocp_resources.namespace import Namespace
+from ocp_resources.pod import Pod
+
+# Core API group (empty string)
+print(Pod.api_group)  # ""
+print(Pod.api_version)  # "v1"
+
+# Apps API group
+print(Deployment.api_group)  # "apps"
+print(Deployment.api_version)  # "v1"
+
+# Resources with no group (core v1)
+print(Namespace.api_version)  # "v1"
+```
+
+Common API groups available through `Resource.ApiGroup`:
+
+```python
+from ocp_resources.resource import Resource
+
+# Access predefined API groups
+print(Resource.ApiGroup.APPS)  # "apps"
+print(Resource.ApiGroup.BATCH)  # "batch"
+print(Resource.ApiGroup.NETWORKING_K8S_IO)  # "networking.k8s.io"
+print(Resource.ApiGroup.RBAC_AUTHORIZATION_K8S_IO)  # "rbac.authorization.k8s.io"
+```
+
+## Resource Constants
+
+The `Resource` class inherits from `ResourceConstants`, providing common constants:
+
+```python
+from ocp_resources.pod import Pod
+
+# Status constants
+print(Pod.Status.RUNNING)
+print(Pod.Status.PENDING)
+print(Pod.Status.FAILED)
+
+# Condition constants
+print(Pod.Condition.READY)
+print(Pod.Condition.INITIALIZED)
+print(Pod.Condition.Status.TRUE)
+print(Pod.Condition.Status.FALSE)
+```
+
+## Best Practices
+
+<Warning>
+Always pass a `client` instance when creating resources. The old pattern of using `config_file` and `context` is deprecated.
+</Warning>
+
+### Do: Use Client Instance
+
+```python
+from ocp_resources.resource import get_client
+from ocp_resources.namespace import Namespace
+
+client = get_client()
+ns = Namespace(client=client, name="my-ns")
+```
+
+### Don't: Use Deprecated Parameters
+
+```python
+# Deprecated - will be removed in future versions
+ns = Namespace(
+    config_file="~/.kube/config",
+    context="my-context",
+    name="my-ns"
+)
+```
+
+## Error Handling
+
+```python
+from ocp_resources.exceptions import (
+    ResourceNotFoundError,
+    ValidationError,
+    ResourceTeardownError
+)
+from kubernetes.dynamic.exceptions import (
+    NotFoundError,
+    ConflictError,
+    ForbiddenError
+)
+
+try:
+    pod = Pod(
+        client=client,
+        namespace="default",
+        name="my-pod",
+        ensure_exists=True  # Raises if not found
+    )
+except ResourceNotFoundError:
+    print("Pod does not exist")
+
+try:
+    ns.deploy()
+except ConflictError:
+    print("Resource already exists")
+except ForbiddenError:
+    print("No permission to create resource")
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Namespaced Resources" icon="folder" href="/core-concepts/namespaced-resources">
+    Learn about resources that exist within a namespace
+  </Card>
+  <Card title="Context Managers" icon="brackets-curly" href="/core-concepts/context-managers">
+    Automatic resource lifecycle management
+  </Card>
+  <Card title="Client Configuration" icon="gear" href="/core-concepts/client-configuration">
+    Configure your Kubernetes client connection
+  </Card>
+  <Card title="API Reference" icon="book" href="/api-reference/resource">
+    Complete Resource class API documentation
+  </Card>
+</CardGroup>

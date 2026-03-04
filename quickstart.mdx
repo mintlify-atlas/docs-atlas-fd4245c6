@@ -1,80 +1,601 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get up and running with OpenShift Python Wrapper in minutes
 ---
 
-## Get started in three steps
+This guide will help you perform your first operations with the OpenShift Python Wrapper. You'll learn how to connect to a cluster, create resources, and use the wrapper's key features.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+<Steps>
+  <Step title="Ensure Python 3.10+ is installed">
+    ```bash
+    python --version
+    # Should output Python 3.10 or higher
+    ```
+  </Step>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+  <Step title="Install the library">
+    ```bash
+    uv pip install openshift-python-wrapper
+    ```
+  </Step>
+
+  <Step title="Configure cluster access">
+    Ensure you have a valid kubeconfig file or cluster credentials. Test your connection:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```bash
+    kubectl cluster-info
+    ```
+  </Step>
+</Steps>
+
+## Your First Resource
+
+Let's create a simple Namespace resource to understand the basic workflow.
+
+<CodeGroup>
+```python Basic Example
+from ocp_resources.namespace import Namespace
+from ocp_resources.resource import get_client
+
+# Get a client to connect to your cluster
+client = get_client()
+
+# Create a namespace
+ns = Namespace(client=client, name="my-first-namespace")
+ns.deploy()
+
+# Verify it exists
+print(f"Namespace exists: {ns.exists}")
+print(f"Namespace status: {ns.status}")
+
+# Clean up
+ns.clean_up()
+```
+
+```python Using Context Manager
+from ocp_resources.namespace import Namespace
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Context manager automatically handles cleanup
+with Namespace(client=client, name="my-first-namespace") as ns:
+    # Wait for namespace to be active
+    ns.wait_for_status(status=Namespace.Status.ACTIVE, timeout=120)
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    print(f"Namespace {ns.name} is ready!")
+    print(f"Status: {ns.status}")
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    # Do work with the namespace...
+    # Automatic cleanup happens when exiting the context
+```
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+```python Fake Client (Testing)
+from ocp_resources.namespace import Namespace
+from ocp_resources.resource import get_client
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+# Use fake client for testing without a real cluster
+client = get_client(fake=True)
 
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+with Namespace(client=client, name="test-namespace") as ns:
+    ns.deploy()
+    print(f"Test namespace created: {ns.exists}")
+```
+</CodeGroup>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  The **context manager pattern** (`with` statement) is recommended as it ensures automatic resource cleanup, even if an error occurs.
 </Note>
+
+## Working with Pods
+
+Pods are fundamental workload resources. Here's how to create and interact with them:
+
+<CodeGroup>
+```python Create a Pod
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Create a pod with an nginx container
+with Pod(
+    client=client,
+    name="nginx-pod",
+    namespace="default",
+    containers=[{
+        "name": "nginx",
+        "image": "nginx:latest",
+        "ports": [{"containerPort": 80}]
+    }]
+) as pod:
+    # Wait for pod to be running
+    pod.wait_for_status(status=Pod.Status.RUNNING, timeout=300)
+    
+    print(f"Pod {pod.name} is running on node: {pod.node.name}")
+    
+    # Get pod logs
+    logs = pod.log()
+    print(f"Pod logs:\n{logs}")
+```
+
+```python Query Existing Pods
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Get all pods with a specific label
+for pod in Pod.get(client=client, label_selector="app=nginx"):
+    print(f"Pod: {pod.name}")
+    print(f"  Namespace: {pod.namespace}")
+    print(f"  Status: {pod.status}")
+    print(f"  Node: {pod.node.name}")
+    print(f"  IP: {pod.instance.status.podIP}")
+```
+
+```python Execute Commands in Pod
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Get a specific pod
+pod = Pod(client=client, name="nginx-pod", namespace="default")
+
+if pod.exists:
+    # Execute a command inside the container
+    output = pod.execute(
+        command=["ls", "-la", "/etc"],
+        container="nginx"
+    )
+    print(output)
+```
+</CodeGroup>
+
+## Working with Deployments
+
+Deployments manage replica sets and pod lifecycles:
+
+```python
+from ocp_resources.deployment import Deployment
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+with Deployment(
+    client=client,
+    name="nginx-deployment",
+    namespace="default",
+    replicas=3,
+    selector={"matchLabels": {"app": "nginx"}},
+    template={
+        "metadata": {"labels": {"app": "nginx"}},
+        "spec": {
+            "containers": [{
+                "name": "nginx",
+                "image": "nginx:1.21",
+                "ports": [{"containerPort": 80}]
+            }]
+        }
+    }
+) as deployment:
+    deployment.deploy()
+    
+    # Wait for deployment to be ready
+    deployment.wait_for_replicas(timeout=300)
+    
+    print(f"Deployment {deployment.name} is ready!")
+    print(f"Available replicas: {deployment.instance.status.availableReplicas}")
+```
+
+## Advanced Patterns
+
+### Using Resource Body
+
+For complex resources, you can provide a complete body dictionary:
+
+```python
+from ocp_resources.virtual_machine import VirtualMachine
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+vm = VirtualMachine(
+    client=client,
+    name="my-vm",
+    namespace="default",
+    body={
+        "spec": {
+            "runStrategy": "Halted",
+            "template": {
+                "spec": {
+                    "domain": {
+                        "devices": {
+                            "disks": [{"name": "disk0", "disk": {"bus": "virtio"}}]
+                        },
+                        "resources": {"requests": {"memory": "64Mi"}}
+                    },
+                    "volumes": [{
+                        "name": "disk0",
+                        "containerDisk": {"image": "kubevirt/cirros-container-disk-demo"}
+                    }]
+                }
+            }
+        }
+    }
+)
+
+vm.create()
+vm.start()
+vm.vmi.wait_until_running(timeout=180)
+```
+
+### Creating Multiple Resources
+
+Use `ResourceList` to create multiple similar resources efficiently:
+
+```python
+from ocp_resources.namespace import Namespace
+from ocp_resources.role import Role
+from ocp_resources.resource import ResourceList, NamespacedResourceList, get_client
+
+client = get_client()
+
+# Create 3 namespaces: ns-1, ns-2, ns-3
+with ResourceList(
+    resource_class=Namespace,
+    num_resources=3,
+    client=client,
+    name="ns"
+) as namespaces:
+    print(f"Created namespaces: {[ns.name for ns in namespaces]}")
+    
+    # Create a role in each namespace
+    roles = NamespacedResourceList(
+        client=client,
+        resource_class=Role,
+        name="viewer-role",
+        namespaces=[ns.name for ns in namespaces],
+        rules=[{
+            "apiGroups": [""],
+            "resources": ["pods", "services"],
+            "verbs": ["get", "list", "watch"]
+        }]
+    )
+    roles.deploy()
+    
+    print(f"Created roles in namespaces")
+    roles.clean_up()
+```
+
+### Resource with Different API Groups
+
+Some resources exist in multiple API groups:
+
+```python
+from ocp_resources.network import Network
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Default API group (config.openshift.io)
+network_config = Network(client=client, name="cluster")
+
+# Specific API group (operator.openshift.io)
+network_operator = Network(
+    client=client,
+    name="cluster",
+    api_group=Network.ApiGroup.OPERATOR_OPENSHIFT_IO
+)
+```
+
+## Schema Validation
+
+The wrapper includes built-in schema validation to catch errors early:
+
+<CodeGroup>
+```python Manual Validation
+from ocp_resources.pod import Pod
+from ocp_resources.exceptions import ValidationError
+
+# Create a pod and validate before deploying
+pod = Pod(
+    name="nginx-pod",
+    namespace="default",
+    containers=[{"name": "nginx", "image": "nginx:latest"}]
+)
+
+try:
+    pod.validate()
+    print("Pod configuration is valid!")
+except ValidationError as e:
+    print(f"Validation failed: {e}")
+```
+
+```python Auto-validation
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Enable automatic validation on create
+pod = Pod(
+    client=client,
+    name="nginx-pod",
+    namespace="default",
+    containers=[{"name": "nginx", "image": "nginx:latest"}],
+    schema_validation_enabled=True  # Validates before creating
+)
+
+pod.create()  # Will validate automatically
+```
+
+```python Validate Dictionaries
+from ocp_resources.deployment import Deployment
+from ocp_resources.exceptions import ValidationError
+
+deployment_dict = {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {"name": "nginx", "namespace": "default"},
+    "spec": {
+        "replicas": 3,
+        "selector": {"matchLabels": {"app": "nginx"}},
+        "template": {
+            "metadata": {"labels": {"app": "nginx"}},
+            "spec": {
+                "containers": [{
+                    "name": "nginx",
+                    "image": "nginx:1.21"
+                }]
+            }
+        }
+    }
+}
+
+try:
+    Deployment.validate_dict(resource_dict=deployment_dict)
+    print("Deployment configuration is valid!")
+except ValidationError as e:
+    print(f"Validation error: {e}")
+```
+</CodeGroup>
+
+## Common Operations
+
+### Wait for Conditions
+
+Wait for resources to reach desired states:
+
+```python
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+pod = Pod(client=client, name="my-pod", namespace="default")
+
+# Wait for specific status
+pod.wait_for_status(status=Pod.Status.RUNNING, timeout=300)
+
+# Wait for condition
+pod.wait_for_condition(
+    condition="Ready",
+    status="True",
+    timeout=300
+)
+```
+
+### Resource Discovery
+
+Query and filter resources:
+
+```python
+from ocp_resources.pod import Pod
+from ocp_resources.namespace import Namespace
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Get all pods in a namespace
+for pod in Pod.get(client=client, namespace="kube-system"):
+    print(f"Pod: {pod.name}")
+
+# Filter by labels
+for pod in Pod.get(client=client, label_selector="app=nginx,tier=frontend"):
+    print(f"Found pod: {pod.name}")
+
+# Get by field selector
+for pod in Pod.get(client=client, field_selector="status.phase=Running"):
+    print(f"Running pod: {pod.name}")
+```
+
+### Resource Updates
+
+Update existing resources:
+
+```python
+from ocp_resources.config_map import ConfigMap
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+cm = ConfigMap(
+    client=client,
+    name="app-config",
+    namespace="default",
+    data={"key1": "value1"}
+)
+cm.deploy()
+
+# Update the resource
+cm.instance.data["key2"] = "value2"
+cm.update()
+
+print(f"ConfigMap updated: {cm.instance.data}")
+```
+
+## Error Handling
+
+Handle common scenarios gracefully:
+
+```python
+from ocp_resources.namespace import Namespace
+from ocp_resources.resource import get_client
+from ocp_resources.exceptions import ResourceTeardownError
+from timeout_sampler import TimeoutExpiredError
+from kubernetes.dynamic.exceptions import NotFoundError
+
+client = get_client()
+
+try:
+    ns = Namespace(client=client, name="my-namespace")
+    ns.deploy()
+    ns.wait_for_status(status=Namespace.Status.ACTIVE, timeout=120)
+    
+except TimeoutExpiredError:
+    print("Resource did not reach desired state in time")
+except NotFoundError:
+    print("Resource not found on cluster")
+except ResourceTeardownError:
+    print("Failed to clean up resource")
+finally:
+    # Ensure cleanup
+    if ns.exists:
+        ns.clean_up()
+```
+
+## Testing with Fake Client
+
+Write tests without requiring a real cluster:
+
+```python
+import pytest
+from ocp_resources.namespace import Namespace
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+def test_pod_creation():
+    """Test pod creation using fake client"""
+    client = get_client(fake=True)
+    
+    with Namespace(client=client, name="test-ns") as ns:
+        ns.deploy()
+        assert ns.exists
+        
+        with Pod(
+            client=client,
+            name="test-pod",
+            namespace=ns.name,
+            containers=[{"name": "nginx", "image": "nginx:latest"}]
+        ) as pod:
+            pod.deploy()
+            assert pod.exists
+            assert pod.namespace == "test-ns"
+
+if __name__ == "__main__":
+    test_pod_creation()
+    print("Test passed!")
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Context Managers">
+    Always prefer context managers (`with` statements) for automatic cleanup:
+
+    ```python
+    # Good
+    with Namespace(client=client, name="test") as ns:
+        # Work with namespace
+        pass  # Automatic cleanup
+
+    # Avoid
+    ns = Namespace(client=client, name="test")
+    ns.deploy()
+    # ... do work ...
+    ns.clean_up()  # Easy to forget!
+    ```
+  </Accordion>
+
+  <Accordion title="Enable Schema Validation">
+    Catch configuration errors early:
+
+    ```python
+    pod = Pod(
+        client=client,
+        name="my-pod",
+        namespace="default",
+        containers=[...],
+        schema_validation_enabled=True
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Wait for Resource Ready State">
+    Don't assume immediate availability:
+
+    ```python
+    pod.deploy()
+    pod.wait_for_status(status=Pod.Status.RUNNING, timeout=300)
+    # Now safe to interact with the pod
+    ```
+  </Accordion>
+
+  <Accordion title="Use Appropriate Timeouts">
+    Set realistic timeouts based on resource type:
+
+    ```python
+    # Pods might take a few minutes
+    pod.wait_for_status(status=Pod.Status.RUNNING, timeout=300)
+
+    # Deployments can take longer
+    deployment.wait_for_replicas(timeout=600)
+    ```
+  </Accordion>
+
+  <Accordion title="Handle Cleanup Failures">
+    Ensure resources are cleaned up even on errors:
+
+    ```python
+    from ocp_resources.exceptions import ResourceTeardownError
+
+    try:
+        with Namespace(client=client, name="test") as ns:
+            # ... work ...
+            pass
+    except ResourceTeardownError as e:
+        print(f"Warning: Cleanup failed: {e}")
+        # Handle or log the error
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Core Concepts" icon="book" href="/core-concepts/resources">
+    Learn about resources, namespaces, and context managers
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/resource">
+    Explore all available resource classes and methods
+  </Card>
+  <Card title="Advanced Testing" icon="flask" href="/advanced/testing">
+    See real-world examples and patterns
+  </Card>
+  <Card title="Fake Client" icon="vial" href="/advanced/fake-client">
+    Learn how to test your code with the fake client
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/resource">
+    Explore all available resource classes and methods
+  </Card>
+  <Card title="Class Generator" icon="flask" href="/advanced/class-generator">
+    Auto-generate resource wrappers
+  </Card>
+  <Card title="Testing Guide" icon="vial" href="/advanced/testing">
+    Learn how to test your code with the fake client
+  </Card>
+</CardGroup>

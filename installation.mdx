@@ -1,0 +1,236 @@
+---
+title: Installation
+description: Install the OpenShift Python Wrapper library in your project
+---
+
+The OpenShift Python Wrapper provides a simple and intuitive interface for interacting with OpenShift and Kubernetes clusters. It standardizes resource CRUD operations and offers additional capabilities that simplify cluster management.
+
+## Requirements
+
+<Note>
+  The library requires **Python 3.10 or higher**.
+</Note>
+
+## Installation Methods
+
+<Steps>
+  <Step title="Install from PyPI (Recommended)">
+    Install the latest stable version from PyPI using your preferred package manager:
+
+    <CodeGroup>
+      ```bash pip
+      pip install openshift-python-wrapper
+      ```
+
+      ```bash uv (Recommended)
+      uv pip install openshift-python-wrapper
+      ```
+
+      ```bash poetry
+      poetry add openshift-python-wrapper
+      ```
+
+      ```bash pipenv
+      pipenv install openshift-python-wrapper
+      ```
+    </CodeGroup>
+
+    <Note>
+      [uv](https://github.com/astral-sh/uv) is a fast Python package installer and is the recommended tool for managing dependencies.
+    </Note>
+  </Step>
+
+  <Step title="Install from Source">
+    For development or to use the latest features, install directly from the source repository:
+
+    ```bash
+    git clone https://github.com/RedHatQE/openshift-python-wrapper.git
+    cd openshift-python-wrapper
+    uv sync
+    ```
+
+    To use the local installation in another project:
+
+    ```bash
+    uv pip install /path/to/openshift-python-wrapper
+    ```
+  </Step>
+
+  <Step title="Verify Installation">
+    Verify the installation by importing the library:
+
+    ```python
+    from ocp_resources.resource import get_client
+    from ocp_resources.namespace import Namespace
+
+    print("OpenShift Python Wrapper installed successfully!")
+    ```
+  </Step>
+</Steps>
+
+## Dependencies
+
+The library automatically installs the following key dependencies:
+
+- **kubernetes** (>=31.0.0) - Official Kubernetes Python client
+- **timeout-sampler** - Utilities for waiting and polling resources
+- **python-simple-logger** - Logging utilities
+- **deepdiff** - Deep comparison of resource states
+- **jsonschema** - Schema validation for resources
+- **requests** - HTTP library for API calls
+
+## Authentication Setup
+
+The wrapper supports multiple authentication methods. Configure your cluster access using one of the following:
+
+<Accordion title="Using kubeconfig (Default)">
+  The library automatically reads from your kubeconfig file:
+
+  ```bash
+  # Default location
+  export KUBECONFIG=~/.kube/config
+  ```
+
+  ```python
+  from ocp_resources.resource import get_client
+
+  # Uses default kubeconfig
+  client = get_client()
+
+  # Or specify a custom kubeconfig file
+  client = get_client(config_file="/path/to/kubeconfig")
+
+  # Use a specific context
+  client = get_client(context="my-cluster-context")
+  ```
+</Accordion>
+
+<Accordion title="Using Bearer Token">
+  Authenticate using an API token:
+
+  ```python
+  from ocp_resources.resource import get_client
+
+  client = get_client(
+      host="https://api.cluster.example.com:6443",
+      token="your-bearer-token-here",
+      verify_ssl=True
+  )
+  ```
+</Accordion>
+
+<Accordion title="Using Username and Password">
+  Authenticate with basic credentials (uses OAuth flow):
+
+  ```python
+  from ocp_resources.resource import get_client
+
+  client = get_client(
+      host="https://api.cluster.example.com:6443",
+      username="your-username",
+      password="your-password",
+      verify_ssl=True
+  )
+  ```
+</Accordion>
+
+<Accordion title="Using Configuration Dictionary">
+  Pass kubeconfig as a dictionary:
+
+  ```python
+  from ocp_resources.resource import get_client
+
+  config_dict = {
+      "clusters": [{
+          "name": "my-cluster",
+          "cluster": {
+              "server": "https://api.cluster.example.com:6443",
+              "certificate-authority-data": "..."
+          }
+      }],
+      "users": [{
+          "name": "my-user",
+          "user": {"token": "..."}
+      }],
+      "contexts": [{
+          "name": "my-context",
+          "context": {"cluster": "my-cluster", "user": "my-user"}
+      }],
+      "current-context": "my-context"
+  }
+
+  client = get_client(config_dict=config_dict)
+  ```
+</Accordion>
+
+## Environment Configuration
+
+### Logging
+
+Control the logging level for the wrapper:
+
+```bash
+export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL="INFO"
+# Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+```
+
+Disable log data hashing in secure environments:
+
+```bash
+export OPENSHIFT_PYTHON_WRAPPER_HASH_LOG_DATA="false"
+```
+
+<Warning>
+  Setting `OPENSHIFT_PYTHON_WRAPPER_HASH_LOG_DATA="false"` will expose sensitive information in logs. Only use this in secure environments.
+</Warning>
+
+### Proxy Configuration
+
+Route traffic through a proxy server:
+
+```bash
+export HTTPS_PROXY="http://proxy.example.com:8080"
+# or
+export HTTP_PROXY="http://proxy.example.com:8080"
+```
+
+The library automatically detects and uses the proxy configuration.
+
+## Additional Features
+
+### Fake Kubernetes Client
+
+For testing without a real cluster, use the built-in fake client:
+
+```python
+from ocp_resources.resource import get_client
+
+# Get a fake client for testing
+client = get_client(fake=True)
+```
+
+See the [Fake Kubernetes Client documentation](https://github.com/RedHatQE/openshift-python-wrapper/tree/main/fake_kubernetes_client) for details.
+
+### Command-Line Tools
+
+The library includes command-line utilities:
+
+- **class-generator** - Generate resource classes from OpenShift API schemas
+- **openshift-mcp-server** - MCP server for exposing OpenShift functionality
+
+```bash
+# Check available commands
+class-generator --help
+openshift-mcp-server --help
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Get started with basic operations and examples
+  </Card>
+  <Card title="Core Concepts" icon="book" href="/core-concepts/resources">
+    Learn about resources, clients, and patterns
+  </Card>
+</CardGroup>

@@ -1,0 +1,290 @@
+---
+title: 'VirtualMachine'
+description: 'Virtual Machine resource for managing KubeVirt virtual machines'
+icon: 'computer'
+---
+
+## Overview
+
+The `VirtualMachine` class provides a comprehensive interface for managing KubeVirt virtual machines in OpenShift. It supports lifecycle operations including start, stop, restart, and status monitoring.
+
+## Class Definition
+
+```python
+from ocp_resources.virtual_machine import VirtualMachine
+
+class VirtualMachine(NamespacedResource):
+    api_group = NamespacedResource.ApiGroup.KUBEVIRT_IO
+```
+
+## Constructor
+
+<ParamField path="name" type="string">
+  Name of the virtual machine resource.
+</ParamField>
+
+<ParamField path="namespace" type="string">
+  Namespace where the virtual machine will be created.
+</ParamField>
+
+<ParamField path="client" type="DynamicClient">
+  Kubernetes client instance for API communication.
+</ParamField>
+
+<ParamField path="body" type="dict">
+  Dictionary containing the VM specification including template, domain, devices, and volumes configuration.
+</ParamField>
+
+<ParamField path="teardown" type="boolean" default="true">
+  Whether to delete the resource during cleanup operations.
+</ParamField>
+
+<ParamField path="yaml_file" type="string">
+  Path to a YAML file containing the VM definition.
+</ParamField>
+
+<ParamField path="delete_timeout" type="int" default="TIMEOUT_4MINUTES">
+  Timeout in seconds for deletion operations (default: 240 seconds).
+</ParamField>
+
+## Run Strategies
+
+The `VirtualMachine.RunStrategy` class defines how the VM lifecycle should be managed:
+
+- `MANUAL`: VM must be manually started and stopped
+- `HALTED`: VM should remain stopped
+- `ALWAYS`: VM should always be running
+- `RERUNONFAILURE`: VM should restart on failure
+
+## Status Values
+
+The `VirtualMachine.Status` class provides constants for VM states:
+
+- `MIGRATING`: VM is being migrated to another node
+- `PAUSED`: VM is paused
+- `PROVISIONING`: VM resources are being provisioned
+- `STARTING`: VM is starting up
+- `STOPPED`: VM is stopped
+- `STOPPING`: VM is shutting down
+- `WAITING_FOR_VOLUME_BINDING`: Waiting for volumes to be bound
+- `ERROR_UNSCHEDULABLE`: VM cannot be scheduled
+- `DATAVOLUME_ERROR`: Error with associated DataVolume
+- `ERROR_PVC_NOT_FOUND`: PVC not found
+- `IMAGE_PULL_BACK_OFF`: Image pull failures
+- `ERR_IMAGE_PULL`: Image pull error
+- `CRASH_LOOPBACK_OFF`: VM is crash looping
+
+## Methods
+
+### start()
+
+Starts the virtual machine.
+
+<ParamField path="timeout" type="int" default="TIMEOUT_4MINUTES">
+  Maximum time to wait for the VM to start (in seconds).
+</ParamField>
+
+<ParamField path="wait" type="boolean" default="false">
+  Whether to wait for the VM to reach running status.
+</ParamField>
+
+```python
+vm.start(timeout=240, wait=True)
+```
+
+### stop()
+
+Stops the virtual machine.
+
+<ParamField path="timeout" type="int" default="TIMEOUT_4MINUTES">
+  Maximum time to wait for the VM to stop (in seconds).
+</ParamField>
+
+<ParamField path="vmi_delete_timeout" type="int" default="TIMEOUT_4MINUTES">
+  Maximum time to wait for the VMI to be deleted (in seconds).
+</ParamField>
+
+<ParamField path="wait" type="boolean" default="false">
+  Whether to wait for the VM to stop and VMI to be deleted.
+</ParamField>
+
+```python
+vm.stop(timeout=240, wait=True)
+```
+
+### restart()
+
+Restarts the virtual machine.
+
+<ParamField path="timeout" type="int" default="TIMEOUT_4MINUTES">
+  Maximum time to wait for the VM to restart (in seconds).
+</ParamField>
+
+<ParamField path="wait" type="boolean" default="false">
+  Whether to wait for the VM to complete restart.
+</ParamField>
+
+```python
+vm.restart(timeout=240, wait=True)
+```
+
+### wait_for_ready_status()
+
+Waits for the VM to reach a specific ready status.
+
+<ParamField path="status" type="boolean | None" required>
+  Target status: `True` for running VM, `None` for stopped VM.
+</ParamField>
+
+<ParamField path="timeout" type="int" default="TIMEOUT_4MINUTES">
+  Maximum time to wait (in seconds).
+</ParamField>
+
+<ParamField path="sleep" type="int" default="1">
+  Sleep interval between status checks (in seconds).
+</ParamField>
+
+```python
+vm.wait_for_ready_status(status=True, timeout=300)
+```
+
+### get_interfaces()
+
+Returns the network interfaces configured for the VM.
+
+```python
+interfaces = vm.get_interfaces()
+```
+
+## Properties
+
+### vmi
+
+Returns the associated `VirtualMachineInstance` object.
+
+```python
+vmi = vm.vmi
+vmi.wait_until_running()
+```
+
+### ready
+
+Returns the VM ready status.
+
+**Returns:** `True` if VM is running, `None` otherwise.
+
+```python
+if vm.ready:
+    print("VM is running")
+```
+
+### printable_status
+
+Returns the human-readable status string from `status.printableStatus`.
+
+```python
+status = vm.printable_status
+print(f"VM status: {status}")
+```
+
+## Usage Example
+
+<CodeGroup>
+
+```python Basic VM creation
+from ocp_resources.virtual_machine import VirtualMachine
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+vm = VirtualMachine(
+    client=client,
+    name="my-vm",
+    namespace="default",
+    body={
+        "spec": {
+            "runStrategy": "Halted",
+            "template": {
+                "spec": {
+                    "domain": {
+                        "devices": {
+                            "disks": [
+                                {"name": "disk0", "disk": {"bus": "virtio"}}
+                            ]
+                        },
+                        "resources": {
+                            "requests": {"memory": "1Gi"}
+                        }
+                    },
+                    "volumes": [
+                        {
+                            "name": "disk0",
+                            "containerDisk": {
+                                "image": "kubevirt/cirros-container-disk-demo"
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    }
+)
+
+vm.create()
+vm.start(wait=True)
+print(f"VM is ready: {vm.ready}")
+```
+
+```python VM lifecycle management
+# Start a VM and wait for it to be ready
+vm.start(wait=True)
+vm.wait_for_ready_status(status=True, timeout=300)
+
+# Check VM status
+if vm.ready:
+    print(f"VM {vm.name} is running")
+    print(f"Status: {vm.printable_status}")
+
+# Access the VMI
+vmi = vm.vmi
+vmi.wait_until_running()
+
+# Restart the VM
+vm.restart(wait=True)
+
+# Stop the VM
+vm.stop(wait=True)
+vm.wait_for_ready_status(status=None, timeout=300)
+```
+
+```python Get VM interfaces
+# Retrieve network interfaces
+interfaces = vm.get_interfaces()
+
+for interface in interfaces:
+    print(f"Interface: {interface.name}")
+    print(f"Model: {interface.model}")
+```
+
+</CodeGroup>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Virtual Machines Guide" icon="server" href="/guides/virtual-machines">
+    Complete guide to working with virtual machines
+  </Card>
+  <Card title="DataVolume" icon="database" href="/api-reference/virtualization/data-volume">
+    Manages persistent storage for virtual machines
+  </Card>
+</CardGroup>
+
+## Notes
+
+<Note>
+Virtual machines with `runStrategy` do not have a `spec.running` attribute. The VM status should be determined from `status.ready`.
+</Note>
+
+<Warning>
+When stopping a VM, ensure you wait for both the VM ready status to be `None` and the VMI to be deleted to confirm complete shutdown.
+</Warning>

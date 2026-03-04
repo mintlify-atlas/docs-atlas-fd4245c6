@@ -1,0 +1,414 @@
+---
+title: Releasing
+description: Guide to releasing new versions of OpenShift Python Wrapper
+---
+
+OpenShift Python Wrapper uses semantic versioning and automated release tooling to publish new versions.
+
+<Warning>
+Only maintainers with write access can create releases. This guide is for maintainers or those interested in understanding the release process.
+</Warning>
+
+## Release Strategy
+
+The project maintains multiple release branches corresponding to OpenShift versions:
+
+- `main` - Active development, latest features
+- `v4.11` - OpenShift 4.11 compatible releases
+- `v4.12` - OpenShift 4.12 compatible releases
+- `v4.13` - OpenShift 4.13 compatible releases
+- etc.
+
+## Prerequisites
+
+### GitHub Token
+
+Export your GitHub personal access token:
+
+```bash
+export GITHUB_TOKEN=<your_github_token>
+```
+
+The token needs:
+- `repo` scope for creating releases
+- `write:packages` scope if publishing packages
+
+### Install release-it
+
+Install [release-it](https://github.com/release-it/release-it) and the bumper plugin:
+
+```bash
+# Install globally
+sudo npm install --global release-it
+
+# Install bumper plugin locally in the repository
+npm install --save-dev @release-it/bumper
+```
+
+## Creating a Release
+
+### Release from Main
+
+To create a release from the main branch:
+
+```bash
+git checkout main
+git pull
+release-it
+```
+
+Follow the interactive prompts:
+
+1. **Select version**: Choose patch, minor, or major version bump
+2. **Review changes**: Confirm the changelog and version updates
+3. **Publish**: Confirm publishing to GitHub and PyPI
+
+### Release from Version Branch
+
+To create a release for a specific OpenShift version (e.g., 4.11):
+
+```bash
+git checkout v4.11
+git pull
+release-it  # Follow the instructions
+```
+
+<Note>
+Always create releases from the branch you want to release, not from main.
+</Note>
+
+## Semantic Versioning
+
+The project follows [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH):
+
+### Version Bump Guidelines
+
+**MAJOR version** (x.0.0) - Incompatible API changes:
+- Breaking changes to existing APIs
+- Removal of deprecated features
+- Major refactoring affecting compatibility
+
+**MINOR version** (0.x.0) - Backward-compatible functionality:
+- New resource support
+- New features and enhancements
+- Deprecations (but not removals)
+
+**PATCH version** (0.0.x) - Backward-compatible bug fixes:
+- Bug fixes
+- Documentation updates
+- Internal improvements
+
+### Examples
+
+- `4.11.1` → `4.11.2` (patch): Bug fix release
+- `4.11.2` → `4.12.0` (minor): New features added
+- `4.12.5` → `5.0.0` (major): Breaking changes
+
+## Release Workflow
+
+### 1. Prepare the Release
+
+Before running `release-it`:
+
+1. **Ensure all tests pass**:
+   ```bash
+   uv run --group tests pytest
+   ```
+
+2. **Run pre-commit checks**:
+   ```bash
+   prek run --all-files
+   ```
+
+3. **Review merged PRs** since last release:
+   ```bash
+   git log --oneline v4.11.5..HEAD
+   ```
+
+4. **Update documentation** if needed
+
+### 2. Run release-it
+
+```bash
+release-it
+```
+
+The tool will:
+- Prompt for version bump (patch/minor/major)
+- Generate changelog from git commits
+- Update version in `pyproject.toml` and other files
+- Create a git tag
+- Push changes and tag to GitHub
+- Create a GitHub release
+- Publish to PyPI (if configured)
+
+### 3. Verify the Release
+
+After releasing:
+
+1. **Check GitHub releases**:
+   - Visit https://github.com/RedHatQE/openshift-python-wrapper/releases
+   - Verify release notes and attached assets
+
+2. **Check PyPI**:
+   - Visit https://pypi.org/project/openshift-python-wrapper/
+   - Verify new version is published
+
+3. **Test installation**:
+   ```bash
+   uv pip install openshift-python-wrapper==<new-version>
+   ```
+
+## Cherry-picking to Release Branches
+
+When a fix needs to be included in a released version:
+
+### Automated Cherry-pick
+
+1. After your PR is merged to main, add a comment:
+   ```
+   /cherry-pick v4.11
+   ```
+
+2. This creates a new PR targeting the `v4.11` branch
+
+3. Review and merge the cherry-pick PR
+
+4. Create a patch release from the version branch:
+   ```bash
+   git checkout v4.11
+   git pull
+   release-it
+   ```
+
+### Manual Cherry-pick
+
+If automated cherry-pick fails:
+
+```bash
+# Checkout the target branch
+git checkout v4.11
+git pull
+
+# Cherry-pick the commit
+git cherry-pick <commit-hash>
+
+# Resolve conflicts if any
+git add .
+git cherry-pick --continue
+
+# Push the changes
+git push origin v4.11
+
+# Create release
+release-it
+```
+
+## Release Configuration
+
+The project uses `.release-it.json` for release configuration. Common settings include:
+
+```json
+{
+  "git": {
+    "commitMessage": "chore: release v${version}",
+    "tagName": "v${version}",
+    "requireCleanWorkingDir": true
+  },
+  "github": {
+    "release": true,
+    "releaseName": "Release v${version}"
+  },
+  "npm": {
+    "publish": false
+  },
+  "plugins": {
+    "@release-it/bumper": {
+      "in": "pyproject.toml",
+      "out": "pyproject.toml"
+    }
+  }
+}
+```
+
+## PyPI Publishing
+
+### Automated Publishing
+
+If configured, `release-it` can automatically publish to PyPI:
+
+```bash
+# Ensure PyPI credentials are configured
+# in ~/.pypirc or environment variables
+release-it
+```
+
+### Manual Publishing
+
+To manually publish to PyPI:
+
+```bash
+# Build the distribution
+uv build
+
+# Upload to PyPI
+uv publish
+```
+
+### TestPyPI
+
+Test releases on TestPyPI first:
+
+```bash
+# Upload to TestPyPI
+uv publish --repository testpypi
+
+# Install from TestPyPI
+uv pip install --index-url https://test.pypi.org/simple/ openshift-python-wrapper
+```
+
+## Post-Release Tasks
+
+### Update Documentation
+
+After releasing:
+
+1. **Update installation docs** with new version
+2. **Update changelog** on ReadTheDocs
+3. **Announce release** in relevant channels
+
+### Documentation Hosting
+
+Documentation is hosted on [ReadTheDocs](https://openshift-python-wrapper.readthedocs.io/):
+
+- Automatically builds on new releases
+- Maintains docs for each version
+- Serves latest stable version by default
+
+## Hotfix Releases
+
+For critical bugs requiring immediate release:
+
+1. **Create hotfix branch** from version branch:
+   ```bash
+   git checkout v4.11
+   git checkout -b hotfix/critical-bug
+   ```
+
+2. **Apply the fix**:
+   ```bash
+   # Make changes
+   git add .
+   git commit -m "fix: critical bug in resource handling"
+   ```
+
+3. **Merge to version branch**:
+   ```bash
+   git checkout v4.11
+   git merge hotfix/critical-bug
+   git push origin v4.11
+   ```
+
+4. **Create patch release**:
+   ```bash
+   release-it
+   ```
+
+5. **Backport to main** if needed:
+   ```bash
+   git checkout main
+   git cherry-pick <commit-hash>
+   git push origin main
+   ```
+
+## Rollback a Release
+
+If a release has critical issues:
+
+### Delete GitHub Release
+
+1. Go to [Releases page](https://github.com/RedHatQE/openshift-python-wrapper/releases)
+2. Click on the problematic release
+3. Click "Delete release"
+4. Delete the corresponding git tag:
+   ```bash
+   git tag -d v4.11.6
+   git push origin :refs/tags/v4.11.6
+   ```
+
+### Yank from PyPI
+
+You cannot delete packages from PyPI, but you can yank them:
+
+1. Go to PyPI project page
+2. Select the version
+3. Click "Options" → "Yank release"
+4. Provide a reason
+
+Yanked releases won't be installed by default but remain available.
+
+## Troubleshooting
+
+### release-it Command Not Found
+
+Ensure release-it is installed globally:
+
+```bash
+sudo npm install --global release-it
+```
+
+### Authentication Failed
+
+Check your GitHub token:
+
+```bash
+echo $GITHUB_TOKEN
+# Should output your token
+
+# If empty, export it:
+export GITHUB_TOKEN=<your_token>
+```
+
+### Version Bump Failed
+
+Ensure working directory is clean:
+
+```bash
+git status
+# Should show "nothing to commit, working tree clean"
+
+git stash  # If you have uncommitted changes
+```
+
+### PyPI Upload Failed
+
+Verify PyPI credentials:
+
+```bash
+# Check ~/.pypirc exists and is configured
+cat ~/.pypirc
+
+# Or use environment variables
+export TWINE_USERNAME=__token__
+export TWINE_PASSWORD=<your-pypi-token>
+```
+
+## Best Practices
+
+1. **Always release from clean working directory**
+2. **Test thoroughly before releasing**
+3. **Review changelog before confirming**
+4. **Announce major releases** to users
+5. **Maintain version branches** for supported releases
+6. **Cherry-pick critical fixes** to active version branches
+7. **Document breaking changes** clearly
+8. **Use semantic versioning** consistently
+9. **Test on TestPyPI** before production release
+10. **Monitor issues** after release for problems
+
+## Additional Resources
+
+- [release-it documentation](https://github.com/release-it/release-it)
+- [Semantic Versioning](https://semver.org/)
+- [PyPI Publishing Guide](https://packaging.python.org/tutorials/packaging-projects/)
+- [GitHub Releases](https://docs.github.com/en/repositories/releasing-projects-on-github)

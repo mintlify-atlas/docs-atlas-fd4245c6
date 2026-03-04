@@ -1,0 +1,661 @@
+---
+title: Namespaced Resources
+description: Working with resources that exist within Kubernetes namespaces
+---
+
+Namespaced resources are Kubernetes objects that exist within a specific namespace. The `NamespacedResource` class extends the base `Resource` class to provide namespace-aware functionality.
+
+## Overview
+
+Most Kubernetes resources are namespaced, meaning they exist within a namespace scope and are isolated from resources in other namespaces. Common examples include Pods, Deployments, Services, ConfigMaps, and Secrets.
+
+## NamespacedResource Class
+
+The `NamespacedResource` class is defined in `/home/daytona/workspace/source/ocp_resources/resource.py:1598` and provides:
+
+- Namespace requirement enforcement
+- Namespace-aware API operations
+- Automatic namespace handling from YAML/dict inputs
+
+```python
+class NamespacedResource(Resource):
+    """Namespaced object, inherited from Resource."""
+    
+    def __init__(
+        self,
+        name: str | None = None,
+        namespace: str | None = None,  # Required for namespaced resources
+        client: DynamicClient | None = None,
+        **kwargs
+    ):
+        # Namespace is mandatory for namespaced resources
+        ...
+```
+
+## Creating Namespaced Resources
+
+### Basic Creation
+
+```python
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Both name and namespace are required
+pod = Pod(
+    client=client,
+    name="my-pod",
+    namespace="default",  # Required
+    containers=[{
+        "name": "nginx",
+        "image": "nginx:latest"
+    }]
+)
+pod.deploy()
+```
+
+<Warning>
+Namespaced resources require both `name` and `namespace` parameters. Omitting either will raise a `MissingRequiredArgumentError`.
+</Warning>
+
+### From YAML with Namespace
+
+```yaml
+# deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  namespace: production  # Namespace in YAML
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.14.2
+```
+
+```python
+from ocp_resources.deployment import Deployment
+
+# Namespace is extracted from YAML
+deployment = Deployment(
+    client=client,
+    yaml_file="deployment.yaml"
+)
+print(f"Namespace: {deployment.namespace}")  # "production"
+deployment.deploy()
+```
+
+### Override Namespace from YAML
+
+```python
+# Override namespace even if specified in YAML
+deployment = Deployment(
+    client=client,
+    yaml_file="deployment.yaml",
+    namespace="staging"  # Overrides YAML namespace
+)
+print(f"Namespace: {deployment.namespace}")  # "staging"
+```
+
+## Common Namespaced Resources
+
+Here are the most commonly used namespaced resources:
+
+### Workload Resources
+
+```python
+from ocp_resources.pod import Pod
+from ocp_resources.deployment import Deployment
+from ocp_resources.daemonset import DaemonSet
+from ocp_resources.statefulset import StatefulSet
+from ocp_resources.job import Job
+from ocp_resources.cron_job import CronJob
+
+# All inherit from NamespacedResource
+deployment = Deployment(
+    client=client,
+    name="web-server",
+    namespace="production",
+    replicas=3,
+    selector={"matchLabels": {"app": "web"}},
+    template={
+        "metadata": {"labels": {"app": "web"}},
+        "spec": {
+            "containers": [{
+                "name": "nginx",
+                "image": "nginx:latest"
+            }]
+        }
+    }
+)
+```
+
+### Configuration Resources
+
+```python
+from ocp_resources.config_map import ConfigMap
+from ocp_resources.secret import Secret
+
+# ConfigMap
+config = ConfigMap(
+    client=client,
+    name="app-config",
+    namespace="default",
+    data={"app.properties": "key=value"}
+)
+config.deploy()
+
+# Secret
+secret = Secret(
+    client=client,
+    name="app-secret",
+    namespace="default",
+    string_data={"password": "mypassword"}
+)
+secret.deploy()
+```
+
+### Network Resources
+
+```python
+from ocp_resources.service import Service
+from ocp_resources.ingress_networking_k8s_io import Ingress
+from ocp_resources.network_policy import NetworkPolicy
+
+# Service
+service = Service(
+    client=client,
+    name="web-service",
+    namespace="default",
+    selector={"app": "web"},
+    ports=[{"port": 80, "targetPort": 8080}]
+)
+service.deploy()
+```
+
+### Storage Resources
+
+```python
+from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
+
+pvc = PersistentVolumeClaim(
+    client=client,
+    name="data-pvc",
+    namespace="default",
+    access_modes=["ReadWriteOnce"],
+    storage_class_name="standard",
+    storage="10Gi"
+)
+pvc.deploy()
+```
+
+### RBAC Resources
+
+```python
+from ocp_resources.role import Role
+from ocp_resources.role_binding import RoleBinding
+from ocp_resources.service_account import ServiceAccount
+
+# ServiceAccount (namespaced)
+sa = ServiceAccount(
+    client=client,
+    name="app-sa",
+    namespace="default"
+)
+sa.deploy()
+
+# Role (namespaced)
+role = Role(
+    client=client,
+    name="pod-reader",
+    namespace="default",
+    rules=[{
+        "apiGroups": [""],
+        "resources": ["pods"],
+        "verbs": ["get", "list"]
+    }]
+)
+role.deploy()
+```
+
+## Querying Namespaced Resources
+
+### Get Resources in Specific Namespace
+
+```python
+from ocp_resources.pod import Pod
+
+# Get all pods in namespace
+for pod in Pod.get(client=client, namespace="default"):
+    print(f"Pod: {pod.name} in namespace {pod.namespace}")
+```
+
+### Get Resources Across All Namespaces
+
+```python
+# Get pods from all namespaces
+for pod in Pod.get(client=client):
+    print(f"Pod: {pod.name} in namespace {pod.namespace}")
+
+# With label selector across all namespaces
+for pod in Pod.get(
+    client=client,
+    label_selector="app=nginx"
+):
+    print(f"Pod: {pod.name} in namespace {pod.namespace}")
+```
+
+### Get Single Resource
+
+```python
+# Get specific pod in namespace
+for pod in Pod.get(
+    client=client,
+    namespace="default",
+    name="my-pod"
+):
+    print(f"Found: {pod.name}")
+    break  # Only one result expected
+```
+
+## Namespace Management
+
+### Check Resource Namespace
+
+```python
+from ocp_resources.deployment import Deployment
+
+deployment = Deployment(
+    client=client,
+    namespace="production",
+    name="web-app"
+)
+
+print(f"Resource namespace: {deployment.namespace}")  # "production"
+```
+
+### Ensure Namespace Exists
+
+```python
+from ocp_resources.namespace import Namespace
+from ocp_resources.deployment import Deployment
+
+# Create namespace first
+ns = Namespace(client=client, name="production")
+if not ns.exists:
+    ns.deploy()
+    ns.wait_for_status(status=Namespace.Status.ACTIVE, timeout=60)
+
+# Then create namespaced resource
+deployment = Deployment(
+    client=client,
+    namespace="production",
+    name="web-app"
+)
+deployment.deploy()
+```
+
+### Create Multiple Resources in Same Namespace
+
+```python
+from ocp_resources.namespace import Namespace
+from ocp_resources.deployment import Deployment
+from ocp_resources.service import Service
+
+namespace = "my-app"
+client = get_client()
+
+# Create namespace
+with Namespace(client=client, name=namespace) as ns:
+    # Create deployment
+    deployment = Deployment(
+        client=client,
+        namespace=namespace,
+        name="web-server",
+        replicas=3,
+        selector={"matchLabels": {"app": "web"}},
+        template={
+            "metadata": {"labels": {"app": "web"}},
+            "spec": {
+                "containers": [{
+                    "name": "nginx",
+                    "image": "nginx:latest"
+                }]
+            }
+        }
+    )
+    deployment.deploy()
+    
+    # Create service
+    service = Service(
+        client=client,
+        namespace=namespace,
+        name="web-service",
+        selector={"app": "web"},
+        ports=[{"port": 80, "targetPort": 80}]
+    )
+    service.deploy()
+    
+    # Cleanup happens automatically when exiting context
+```
+
+## Differences from Cluster Resources
+
+<AccordionGroup>
+  <Accordion title="Namespace Requirement">
+    **Namespaced Resources:** Require `namespace` parameter
+    
+    ```python
+    pod = Pod(client=client, name="my-pod", namespace="default")
+    ```
+    
+    **Cluster Resources:** No namespace parameter
+    
+    ```python
+    ns = Namespace(client=client, name="my-namespace")
+    ```
+  </Accordion>
+  
+  <Accordion title="API Operations">
+    **Namespaced Resources:** API calls include namespace
+    
+    ```python
+    # GET /api/v1/namespaces/default/pods/my-pod
+    pod.instance
+    ```
+    
+    **Cluster Resources:** API calls are cluster-wide
+    
+    ```python
+    # GET /api/v1/namespaces/my-namespace
+    ns.instance
+    ```
+  </Accordion>
+  
+  <Accordion title="Deletion Scope">
+    **Namespaced Resources:** Deleted with namespace or individually
+    
+    ```python
+    # Delete pod
+    pod.delete()
+    
+    # Or delete entire namespace (deletes all resources in it)
+    ns.delete()
+    ```
+    
+    **Cluster Resources:** Only individually deleted
+    
+    ```python
+    # Delete cluster role
+    cluster_role.delete()
+    ```
+  </Accordion>
+  
+  <Accordion title="RBAC Scope">
+    **Namespaced Resources:** Can use namespace-scoped RBAC (Role/RoleBinding)
+    
+    **Cluster Resources:** Require cluster-scoped RBAC (ClusterRole/ClusterRoleBinding)
+  </Accordion>
+</AccordionGroup>
+
+## Common Patterns
+
+### Pattern 1: Create App with Multiple Resources
+
+```python
+from ocp_resources.namespace import Namespace
+from ocp_resources.deployment import Deployment
+from ocp_resources.service import Service
+from ocp_resources.config_map import ConfigMap
+
+def create_application(client, app_name, namespace_name):
+    """Create a complete application with multiple resources."""
+    
+    # Create namespace
+    ns = Namespace(client=client, name=namespace_name)
+    ns.deploy()
+    ns.wait_for_status(status=Namespace.Status.ACTIVE, timeout=60)
+    
+    # Create ConfigMap
+    config = ConfigMap(
+        client=client,
+        name=f"{app_name}-config",
+        namespace=namespace_name,
+        data={"app.conf": "setting=value"}
+    )
+    config.deploy()
+    
+    # Create Deployment
+    deployment = Deployment(
+        client=client,
+        name=app_name,
+        namespace=namespace_name,
+        replicas=3,
+        selector={"matchLabels": {"app": app_name}},
+        template={
+            "metadata": {"labels": {"app": app_name}},
+            "spec": {
+                "containers": [{
+                    "name": "app",
+                    "image": f"{app_name}:latest",
+                    "envFrom": [{"configMapRef": {"name": f"{app_name}-config"}}]
+                }]
+            }
+        }
+    )
+    deployment.deploy()
+    
+    # Create Service
+    service = Service(
+        client=client,
+        name=app_name,
+        namespace=namespace_name,
+        selector={"app": app_name},
+        ports=[{"port": 80, "targetPort": 8080}]
+    )
+    service.deploy()
+    
+    return ns, config, deployment, service
+
+# Usage
+client = get_client()
+ns, config, deployment, service = create_application(
+    client=client,
+    app_name="my-app",
+    namespace_name="production"
+)
+```
+
+### Pattern 2: Resource with Namespace Context
+
+```python
+from ocp_resources.namespace import Namespace
+from ocp_resources.pod import Pod
+
+class NamespaceContext:
+    """Context manager for working within a namespace."""
+    
+    def __init__(self, client, namespace):
+        self.client = client
+        self.namespace_name = namespace
+        self.namespace = None
+    
+    def __enter__(self):
+        self.namespace = Namespace(
+            client=self.client,
+            name=self.namespace_name
+        )
+        if not self.namespace.exists:
+            self.namespace.deploy()
+        return self
+    
+    def create_pod(self, name, **kwargs):
+        """Create pod in this namespace."""
+        return Pod(
+            client=self.client,
+            namespace=self.namespace_name,
+            name=name,
+            **kwargs
+        )
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.namespace:
+            self.namespace.clean_up()
+
+# Usage
+client = get_client()
+with NamespaceContext(client=client, namespace="test") as ctx:
+    pod = ctx.create_pod(
+        name="test-pod",
+        containers=[{"name": "nginx", "image": "nginx"}]
+    )
+    pod.deploy()
+```
+
+### Pattern 3: Batch Resource Creation
+
+```python
+from ocp_resources.namespace import Namespace
+from ocp_resources.pod import Pod
+
+def create_pods_in_namespace(client, namespace, pod_names):
+    """Create multiple pods in a namespace."""
+    
+    # Ensure namespace exists
+    ns = Namespace(client=client, name=namespace)
+    if not ns.exists:
+        ns.deploy()
+        ns.wait_for_status(status=Namespace.Status.ACTIVE, timeout=60)
+    
+    # Create pods
+    pods = []
+    for pod_name in pod_names:
+        pod = Pod(
+            client=client,
+            namespace=namespace,
+            name=pod_name,
+            containers=[{
+                "name": "app",
+                "image": "busybox",
+                "command": ["sleep", "3600"]
+            }]
+        )
+        pod.deploy()
+        pods.append(pod)
+    
+    return pods
+
+# Usage
+client = get_client()
+pods = create_pods_in_namespace(
+    client=client,
+    namespace="test-namespace",
+    pod_names=["pod-1", "pod-2", "pod-3"]
+)
+```
+
+## Troubleshooting
+
+### Missing Namespace Error
+
+```python
+try:
+    pod = Pod(
+        client=client,
+        name="my-pod"
+        # Missing namespace!
+    )
+except MissingRequiredArgumentError as e:
+    print(f"Error: {e}")  # "'name' and 'namespace' are required"
+```
+
+### Namespace Not Found
+
+```python
+from kubernetes.dynamic.exceptions import NotFoundError
+
+pod = Pod(
+    client=client,
+    name="my-pod",
+    namespace="non-existent"
+)
+
+try:
+    pod.deploy()
+except NotFoundError:
+    print("Namespace does not exist, create it first")
+    ns = Namespace(client=client, name="non-existent")
+    ns.deploy()
+    pod.deploy()
+```
+
+### Check Namespace Before Creating Resource
+
+```python
+from ocp_resources.namespace import Namespace
+from ocp_resources.pod import Pod
+
+namespace_name = "production"
+ns = Namespace(client=client, name=namespace_name)
+
+if not ns.exists:
+    print(f"Namespace {namespace_name} does not exist, creating...")
+    ns.deploy()
+    ns.wait_for_status(status=Namespace.Status.ACTIVE, timeout=60)
+
+# Now safe to create pod
+pod = Pod(
+    client=client,
+    namespace=namespace_name,
+    name="my-pod",
+    containers=[{"name": "nginx", "image": "nginx"}]
+)
+pod.deploy()
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Always Specify Namespace" icon="folder">
+    Explicitly provide the namespace parameter for all namespaced resources to avoid confusion.
+  </Card>
+  
+  <Card title="Use Namespace Context Managers" icon="brackets-curly">
+    When creating multiple resources in the same namespace, use context managers for automatic cleanup.
+  </Card>
+  
+  <Card title="Verify Namespace Exists" icon="check">
+    Check if the namespace exists before creating resources in it, or create it as part of your setup.
+  </Card>
+  
+  <Card title="Label Your Resources" icon="tag">
+    Use consistent labels across resources in a namespace for easier querying and management.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Context Managers" icon="brackets-curly" href="/core-concepts/context-managers">
+    Learn about automatic resource lifecycle management
+  </Card>
+  <Card title="Resource Class" icon="cube" href="/core-concepts/resources">
+    Understand the base Resource class
+  </Card>
+  <Card title="Working with Pods" icon="folder" href="/guides/working-with-pods">
+    Complete guide to working with pods
+  </Card>
+  <Card title="Working with Deployments" icon="shield" href="/guides/working-with-deployments">
+    Manage deployments and replicas
+  </Card>
+</CardGroup>

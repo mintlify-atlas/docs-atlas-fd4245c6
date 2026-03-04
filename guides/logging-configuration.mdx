@@ -1,0 +1,419 @@
+---
+title: Logging Configuration
+description: Configure logging levels and customize log output for the OpenShift Python Wrapper
+---
+
+## Overview
+
+The OpenShift Python Wrapper includes comprehensive logging capabilities to help you debug issues and monitor resource operations. You can control log verbosity and configure sensitive data handling.
+
+## Log Levels
+
+The wrapper supports standard Python logging levels:
+
+- `DEBUG`: Detailed information for diagnosing problems
+- `INFO`: Confirmation that things are working as expected (default)
+- `WARNING`: Indication that something unexpected happened
+- `ERROR`: A serious problem occurred
+- `CRITICAL`: A very serious error occurred
+
+## Setting Log Level
+
+### Using Environment Variable
+
+The recommended way to set the log level is via environment variable:
+
+```bash
+# Set log level to DEBUG
+export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG
+
+# Run your script
+python my_script.py
+```
+
+```bash
+# Other log levels
+export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=INFO
+export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=WARNING
+export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=ERROR
+export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=CRITICAL
+```
+
+<Note>
+The log level must be set before importing the wrapper modules. Changes to the environment variable after import will not take effect.
+</Note>
+
+### Setting at Runtime
+
+You can also configure logging programmatically:
+
+```python
+import logging
+
+# Configure before importing wrapper modules
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+# Your code here
+client = get_client()
+pod = Pod(client=client, name="test-pod", namespace="default")
+```
+
+## Log Output Examples
+
+### INFO Level (Default)
+
+At INFO level, you'll see high-level operations:
+
+```python
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+client = get_client()
+pod = Pod(
+    client=client,
+    name="nginx-pod",
+    namespace="default",
+    containers=[{"name": "nginx", "image": "nginx:latest"}]
+)
+pod.deploy()
+```
+
+Output:
+```
+2026-03-04 10:15:23 - ocp_resources.resource - INFO - Creating Pod nginx-pod in namespace default
+2026-03-04 10:15:24 - ocp_resources.resource - INFO - Pod nginx-pod created successfully
+```
+
+### DEBUG Level
+
+At DEBUG level, you'll see detailed operation information:
+
+```bash
+export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG
+```
+
+Output:
+```
+2026-03-04 10:15:23 - ocp_resources.resource - DEBUG - Initializing Pod with name=nginx-pod, namespace=default
+2026-03-04 10:15:23 - ocp_resources.resource - DEBUG - Building resource dictionary
+2026-03-04 10:15:23 - ocp_resources.resource - DEBUG - Calling API: POST /api/v1/namespaces/default/pods
+2026-03-04 10:15:24 - ocp_resources.resource - DEBUG - API response: 201 Created
+2026-03-04 10:15:24 - ocp_resources.resource - INFO - Pod nginx-pod created successfully
+```
+
+<Warning>
+DEBUG level generates extensive output. Only use it for troubleshooting specific issues.
+</Warning>
+
+## Command Execution Logging
+
+When executing commands in pods, the wrapper logs execution details:
+
+```python
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+client = get_client()
+pod = Pod(client=client, name="nginx-pod", namespace="default")
+
+# Execute command (logged automatically)
+output = pod.execute(command=["ls", "-la", "/"])
+```
+
+With INFO level:
+```
+2026-03-04 10:20:15 - ocp_resources.pod - INFO - Execute ['ls', '-la', '/'] on nginx-pod (worker-node-1)
+```
+
+With DEBUG level:
+```
+2026-03-04 10:20:15 - ocp_resources.pod - DEBUG - Connecting to pod nginx-pod in namespace default
+2026-03-04 10:20:15 - ocp_resources.pod - INFO - Execute ['ls', '-la', '/'] on nginx-pod (worker-node-1)
+2026-03-04 10:20:16 - ocp_resources.pod - DEBUG - Command output received: 152 bytes
+```
+
+## Sensitive Data Handling
+
+By default, the wrapper hashes sensitive information in logs for security:
+
+```python
+from ocp_resources.secret import Secret
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+secret = Secret(
+    client=client,
+    name="my-secret",
+    namespace="default",
+    data={"password": "supersecret123"}
+)
+secret.deploy()
+```
+
+Default output (hashed):
+```
+2026-03-04 10:25:30 - ocp_resources.resource - INFO - Creating Secret my-secret with data: {"password": "<hash:a3f5b2c8>"}
+```
+
+### Disable Log Hashing
+
+In secure environments (like local development), you can disable hashing:
+
+```bash
+# Disable log data hashing
+export OPENSHIFT_PYTHON_WRAPPER_HASH_LOG_DATA="false"
+
+# Run your script
+python my_script.py
+```
+
+<Warning>
+Only disable log hashing in secure, controlled environments. Never disable it in production or shared environments where logs might be exposed.
+</Warning>
+
+With hashing disabled:
+```
+2026-03-04 10:25:30 - ocp_resources.resource - INFO - Creating Secret my-secret with data: {"password": "supersecret123"}
+```
+
+## Custom Logger Configuration
+
+### Configure Logger Per Module
+
+Configure logging for specific modules:
+
+```python
+import logging
+
+# Set different levels for different modules
+logging.getLogger('ocp_resources.pod').setLevel(logging.DEBUG)
+logging.getLogger('ocp_resources.deployment').setLevel(logging.INFO)
+logging.getLogger('ocp_resources.resource').setLevel(logging.WARNING)
+
+from ocp_resources.pod import Pod
+from ocp_resources.deployment import Deployment
+from ocp_resources.resource import get_client
+
+# Pod operations will show DEBUG logs
+# Deployment operations will show INFO logs
+# Base resource operations will show WARNING logs
+```
+
+### Custom Log Format
+
+Customize the log output format:
+
+```python
+import logging
+import sys
+
+# Create custom formatter
+formatter = logging.Formatter(
+    fmt='[%(levelname)s] %(asctime)s | %(name)s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# Configure handler
+handler = logging.StreamHandler(sys.stdout)
+handler.setFormatter(formatter)
+
+# Set up logger
+logger = logging.getLogger('ocp_resources')
+logger.setLevel(logging.INFO)
+logger.addHandler(handler)
+
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+```
+
+Output:
+```
+[INFO] 2026-03-04 10:30:15 | ocp_resources.resource | Creating Pod nginx-pod in namespace default
+```
+
+### Log to File
+
+Direct logs to a file instead of console:
+
+```python
+import logging
+
+# Configure file logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    filename='openshift_wrapper.log',
+    filemode='a'  # append mode
+)
+
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+client = get_client()
+pod = Pod(
+    client=client,
+    name="nginx-pod",
+    namespace="default",
+    containers=[{"name": "nginx", "image": "nginx:latest"}]
+)
+pod.deploy()
+
+print("Logs written to openshift_wrapper.log")
+```
+
+### Log to Both File and Console
+
+```python
+import logging
+import sys
+
+# Create logger
+logger = logging.getLogger('ocp_resources')
+logger.setLevel(logging.DEBUG)
+
+# Console handler (INFO and above)
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.INFO)
+console_formatter = logging.Formatter('%(levelname)s - %(message)s')
+console_handler.setFormatter(console_formatter)
+
+# File handler (DEBUG and above)
+file_handler = logging.FileHandler('detailed.log')
+file_handler.setLevel(logging.DEBUG)
+file_formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+file_handler.setFormatter(file_formatter)
+
+# Add handlers
+logger.addHandler(console_handler)
+logger.addHandler(file_handler)
+
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+```
+
+## Troubleshooting with Logs
+
+### Debugging Resource Creation Issues
+
+<Steps>
+  1. Enable DEBUG logging:
+     ```bash
+     export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG
+     ```
+
+  2. Run your script and capture output:
+     ```bash
+     python my_script.py 2>&1 | tee debug.log
+     ```
+
+  3. Review the logs for API calls and responses:
+     ```
+     grep "Calling API" debug.log
+     grep "API response" debug.log
+     ```
+
+  4. Look for error messages:
+     ```
+     grep "ERROR" debug.log
+     grep "CRITICAL" debug.log
+     ```
+</Steps>
+
+### Debugging Command Execution
+
+```python
+import logging
+import os
+
+# Enable DEBUG for detailed execution info
+os.environ['OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL'] = 'DEBUG'
+
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+client = get_client()
+pod = Pod(client=client, name="nginx-pod", namespace="default")
+
+try:
+    output = pod.execute(command=["ls", "-la", "/nonexistent"])
+except Exception as e:
+    # Logs will show detailed error information
+    print(f"Command failed: {e}")
+```
+
+### Debugging Wait Operations
+
+```python
+import os
+os.environ['OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL'] = 'DEBUG'
+
+from ocp_resources.deployment import Deployment
+from ocp_resources.resource import get_client
+
+client = get_client()
+deployment = Deployment(
+    client=client,
+    name="myapp",
+    namespace="default",
+    replicas=3,
+    selector={"matchLabels": {"app": "myapp"}},
+    template={
+        "metadata": {"labels": {"app": "myapp"}},
+        "spec": {
+            "containers": [{"name": "app", "image": "myapp:v1.0"}]
+        }
+    }
+)
+
+deployment.deploy()
+
+# DEBUG logs will show each poll attempt
+deployment.wait_for_replicas(deployed=True, timeout=240)
+```
+
+## Configuration Best Practices
+
+1. **Use INFO for Production**: Keep default INFO level in production
+2. **DEBUG for Development**: Use DEBUG only when troubleshooting
+3. **Secure Sensitive Data**: Keep log hashing enabled in shared environments
+4. **Log to Files**: Use file logging for long-running operations
+5. **Rotate Logs**: Implement log rotation for production systems
+6. **Filter Noise**: Configure specific modules to reduce log volume
+7. **Monitor Log Size**: Watch log file sizes when DEBUG is enabled
+
+## Environment Variables Summary
+
+<CodeGroup>
+```bash Development
+# Development environment - verbose logging
+export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG
+export OPENSHIFT_PYTHON_WRAPPER_HASH_LOG_DATA="false"
+```
+
+```bash Production
+# Production environment - minimal logging, secure
+export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=INFO
+export OPENSHIFT_PYTHON_WRAPPER_HASH_LOG_DATA="true"
+```
+
+```bash Troubleshooting
+# Troubleshooting - maximum verbosity
+export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL=DEBUG
+export OPENSHIFT_PYTHON_WRAPPER_HASH_LOG_DATA="false"
+```
+</CodeGroup>
+
+## Related Resources
+
+- [Proxy Configuration](/guides/proxy-configuration)
+- [Working with Pods](/guides/working-with-pods)
+- [Resource CRUD Operations](/guides/resource-crud-operations)

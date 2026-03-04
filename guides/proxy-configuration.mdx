@@ -1,0 +1,488 @@
+---
+title: Proxy Configuration
+description: Configure proxy settings to route OpenShift Python Wrapper traffic through a proxy server
+---
+
+## Overview
+
+The OpenShift Python Wrapper supports proxy configuration, allowing you to route all cluster communication through an HTTP or HTTPS proxy server. This is essential for environments with restricted network access or corporate proxy requirements.
+
+## Quick Start
+
+Enable proxy configuration by setting environment variables:
+
+```bash
+# For HTTPS proxy
+export HTTPS_PROXY="http://proxy.example.com:8080"
+
+# OR for HTTP proxy
+export HTTP_PROXY="http://proxy.example.com:8080"
+
+# Run your script
+python my_script.py
+```
+
+<Note>
+The wrapper automatically detects and uses proxy settings from `HTTPS_PROXY` or `HTTP_PROXY` environment variables. No code changes are required.
+</Note>
+
+## Configuration Methods
+
+### HTTPS Proxy
+
+For secure connections (recommended):
+
+```bash
+export HTTPS_PROXY="http://proxy.example.com:8080"
+```
+
+### HTTP Proxy
+
+For non-secure connections:
+
+```bash
+export HTTP_PROXY="http://proxy.example.com:8080"
+```
+
+### Proxy Priority
+
+If both are set, `HTTPS_PROXY` takes precedence:
+
+```bash
+# HTTPS_PROXY will be used
+export HTTPS_PROXY="http://secure-proxy.example.com:8443"
+export HTTP_PROXY="http://proxy.example.com:8080"
+```
+
+## Proxy URL Format
+
+Proxy URLs should follow this format:
+
+```
+http://[username:password@]host:port
+```
+
+### Without Authentication
+
+```bash
+export HTTPS_PROXY="http://proxy.example.com:8080"
+```
+
+### With Authentication
+
+```bash
+export HTTPS_PROXY="http://username:password@proxy.example.com:8080"
+```
+
+### With Special Characters
+
+URL-encode special characters in credentials:
+
+```bash
+# If password is "p@ssw0rd!", encode it as "p%40ssw0rd%21"
+export HTTPS_PROXY="http://user:p%40ssw0rd%21@proxy.example.com:8080"
+```
+
+<Tip>
+Use Python's `urllib.parse.quote()` to encode credentials with special characters:
+```python
+import urllib.parse
+password = "p@ssw0rd!"
+encoded = urllib.parse.quote(password)
+print(f"http://user:{encoded}@proxy.example.com:8080")
+```
+</Tip>
+
+## No Proxy Configuration
+
+Exclude specific hosts from proxying:
+
+```bash
+# Single host
+export NO_PROXY="localhost"
+
+# Multiple hosts
+export NO_PROXY="localhost,127.0.0.1,.internal.example.com"
+
+# With proxy
+export HTTPS_PROXY="http://proxy.example.com:8080"
+export NO_PROXY="localhost,127.0.0.1,10.0.0.0/8,.cluster.local"
+```
+
+<Note>
+The `NO_PROXY` variable accepts comma-separated values:
+- Hostnames: `localhost`, `example.com`
+- IP addresses: `127.0.0.1`, `192.168.1.1`
+- CIDR notation: `10.0.0.0/8`, `172.16.0.0/12`
+- Domain suffixes: `.internal.example.com` (matches all subdomains)
+</Note>
+
+## Usage Examples
+
+### Basic Usage
+
+Set proxy and use the wrapper normally:
+
+```bash
+# Set proxy
+export HTTPS_PROXY="http://proxy.example.com:8080"
+```
+
+```python
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+# Proxy is automatically used
+client = get_client()
+
+pod = Pod(
+    client=client,
+    name="nginx-pod",
+    namespace="default",
+    containers=[{"name": "nginx", "image": "nginx:latest"}]
+)
+pod.deploy()
+
+# All API calls go through the proxy
+for pod in Pod.get(client=client, namespace="default"):
+    print(f"Pod: {pod.name}")
+```
+
+### With Authentication
+
+```bash
+# Set authenticated proxy
+export HTTPS_PROXY="http://myuser:mypassword@proxy.example.com:8080"
+export NO_PROXY="localhost,127.0.0.1"
+```
+
+```python
+from ocp_resources.deployment import Deployment
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+deployment = Deployment(
+    client=client,
+    name="myapp",
+    namespace="production",
+    replicas=3,
+    selector={"matchLabels": {"app": "myapp"}},
+    template={
+        "metadata": {"labels": {"app": "myapp"}},
+        "spec": {
+            "containers": [{"name": "app", "image": "myapp:v1.0"}]
+        }
+    }
+)
+
+deployment.deploy()
+deployment.wait_for_replicas(deployed=True, timeout=240)
+```
+
+### Multiple Clusters with Different Proxies
+
+```python
+import os
+from ocp_resources.namespace import Namespace
+from ocp_resources.resource import get_client
+
+# Cluster 1 with proxy A
+os.environ['HTTPS_PROXY'] = 'http://proxy-a.example.com:8080'
+client_a = get_client(config_file='/path/to/kubeconfig-a')
+
+ns_a = Namespace(client=client_a, name="namespace-a")
+ns_a.deploy()
+
+# Cluster 2 with proxy B
+os.environ['HTTPS_PROXY'] = 'http://proxy-b.example.com:8080'
+client_b = get_client(config_file='/path/to/kubeconfig-b')
+
+ns_b = Namespace(client=client_b, name="namespace-b")
+ns_b.deploy()
+```
+
+## Corporate Proxy Setup
+
+### Windows Environment
+
+```batch
+REM Set proxy in Command Prompt
+set HTTPS_PROXY=http://proxy.corp.example.com:8080
+set NO_PROXY=localhost,127.0.0.1,.corp.example.com
+
+REM Run Python script
+python my_script.py
+```
+
+```powershell
+# Set proxy in PowerShell
+$env:HTTPS_PROXY = "http://proxy.corp.example.com:8080"
+$env:NO_PROXY = "localhost,127.0.0.1,.corp.example.com"
+
+# Run Python script
+python my_script.py
+```
+
+### Linux/Mac Environment
+
+```bash
+# Add to ~/.bashrc or ~/.zshrc for persistence
+export HTTPS_PROXY="http://proxy.corp.example.com:8080"
+export NO_PROXY="localhost,127.0.0.1,.corp.example.com"
+
+# Source the file
+source ~/.bashrc
+
+# Run script
+python my_script.py
+```
+
+### Docker Container
+
+Pass proxy settings to containers:
+
+```bash
+docker run -it \
+  -e HTTPS_PROXY="http://proxy.example.com:8080" \
+  -e NO_PROXY="localhost,127.0.0.1" \
+  -v $(pwd):/workspace \
+  python:3.11 \
+  python /workspace/my_script.py
+```
+
+### Kubernetes Pod
+
+Configure proxy in pod environment:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: wrapper-pod
+spec:
+  containers:
+  - name: python
+    image: python:3.11
+    env:
+    - name: HTTPS_PROXY
+      value: "http://proxy.example.com:8080"
+    - name: NO_PROXY
+      value: "localhost,127.0.0.1,.cluster.local"
+    command: ["python", "/app/script.py"]
+```
+
+## Verification
+
+### Check Proxy Configuration
+
+Verify proxy settings are detected:
+
+```python
+import os
+
+print(f"HTTPS_PROXY: {os.environ.get('HTTPS_PROXY', 'Not set')}")
+print(f"HTTP_PROXY: {os.environ.get('HTTP_PROXY', 'Not set')}")
+print(f"NO_PROXY: {os.environ.get('NO_PROXY', 'Not set')}")
+```
+
+### Test Proxy Connection
+
+Test if the proxy is working:
+
+```python
+from ocp_resources.namespace import Namespace
+from ocp_resources.resource import get_client
+
+try:
+    client = get_client()
+    
+    # Simple operation to test connectivity
+    namespaces = list(Namespace.get(client=client))
+    print(f"Successfully connected through proxy. Found {len(namespaces)} namespaces.")
+except Exception as e:
+    print(f"Proxy connection failed: {e}")
+```
+
+## Troubleshooting
+
+### Proxy Connection Refused
+
+<Steps>
+  1. Verify proxy URL is correct:
+     ```bash
+     echo $HTTPS_PROXY
+     curl -x $HTTPS_PROXY https://www.google.com
+     ```
+
+  2. Check if proxy requires authentication:
+     ```bash
+     # Test with credentials
+     curl -x http://user:pass@proxy.example.com:8080 https://www.google.com
+     ```
+
+  3. Verify firewall rules allow proxy connection
+
+  4. Check proxy server logs for connection attempts
+</Steps>
+
+### Certificate Verification Errors
+
+<Warning>
+If using a corporate proxy with SSL inspection, you may encounter certificate errors.
+</Warning>
+
+For testing only, you can disable SSL verification (not recommended for production):
+
+```python
+import os
+import urllib3
+
+# Disable SSL warnings (testing only!)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+from ocp_resources.resource import get_client
+
+# This is NOT recommended for production
+client = get_client()
+```
+
+Better solution - add corporate CA certificate:
+
+```bash
+# Set CA certificate bundle
+export REQUESTS_CA_BUNDLE=/path/to/corporate-ca-bundle.crt
+export HTTPS_PROXY="http://proxy.example.com:8080"
+
+python my_script.py
+```
+
+### Proxy Authentication Failures
+
+If authentication fails:
+
+1. Verify credentials are correct
+2. Check if special characters need URL encoding
+3. Test credentials with curl:
+
+```bash
+curl -x http://username:password@proxy.example.com:8080 https://www.google.com
+```
+
+### Requests Not Using Proxy
+
+If requests aren't going through proxy:
+
+1. Verify environment variables are set:
+   ```python
+   import os
+   print(os.environ.get('HTTPS_PROXY'))
+   ```
+
+2. Check NO_PROXY isn't excluding your cluster:
+   ```python
+   print(os.environ.get('NO_PROXY'))
+   ```
+
+3. Ensure variables are set before importing wrapper:
+   ```python
+   import os
+   os.environ['HTTPS_PROXY'] = 'http://proxy.example.com:8080'
+   
+   # Import after setting environment
+   from ocp_resources.resource import get_client
+   ```
+
+## Security Considerations
+
+1. **Avoid Hardcoding Credentials**: Never hardcode proxy credentials in scripts
+2. **Use Environment Variables**: Store credentials in environment variables
+3. **Secure Credential Storage**: Use secrets management for production
+4. **HTTPS Proxy**: Prefer HTTPS proxies for encrypted traffic
+5. **Audit Logging**: Enable proxy logging for security audits
+6. **Least Privilege**: Use proxy accounts with minimum required permissions
+
+## Best Practices
+
+1. **Set Globally**: Configure proxy environment variables at the system level
+2. **Use NO_PROXY**: Exclude internal traffic from proxying
+3. **Test Connectivity**: Always test proxy configuration before deployment
+4. **Document Settings**: Document proxy requirements for your environment
+5. **Monitor Traffic**: Monitor proxy logs for connection issues
+6. **Use Authentication**: Secure proxies with authentication
+7. **Handle Errors**: Add proper error handling for proxy failures
+
+## Complete Example
+
+Here's a complete script with proxy configuration:
+
+```python
+#!/usr/bin/env python3
+"""
+Example script demonstrating proxy configuration
+"""
+
+import os
+import sys
+from ocp_resources.deployment import Deployment
+from ocp_resources.resource import get_client
+
+def main():
+    # Verify proxy configuration
+    proxy = os.environ.get('HTTPS_PROXY') or os.environ.get('HTTP_PROXY')
+    
+    if not proxy:
+        print("Warning: No proxy configured")
+        print("Set HTTPS_PROXY or HTTP_PROXY environment variable")
+        response = input("Continue anyway? (y/n): ")
+        if response.lower() != 'y':
+            sys.exit(1)
+    else:
+        print(f"Using proxy: {proxy}")
+    
+    # Get client (uses proxy automatically)
+    try:
+        client = get_client()
+        print("Successfully connected to cluster through proxy")
+    except Exception as e:
+        print(f"Failed to connect: {e}")
+        sys.exit(1)
+    
+    # Create deployment
+    deployment = Deployment(
+        client=client,
+        name="myapp",
+        namespace="default",
+        replicas=3,
+        selector={"matchLabels": {"app": "myapp"}},
+        template={
+            "metadata": {"labels": {"app": "myapp"}},
+            "spec": {
+                "containers": [{"name": "app", "image": "nginx:latest"}]
+            }
+        }
+    )
+    
+    deployment.deploy()
+    print(f"Deployment {deployment.name} created through proxy")
+    
+    deployment.wait_for_replicas(deployed=True, timeout=240)
+    print(f"Deployment ready with {deployment.instance.status.availableReplicas} replicas")
+
+if __name__ == "__main__":
+    main()
+```
+
+Run with:
+
+```bash
+export HTTPS_PROXY="http://proxy.example.com:8080"
+export NO_PROXY="localhost,127.0.0.1"
+python script.py
+```
+
+## Related Resources
+
+- [Logging Configuration](/guides/logging-configuration)
+- [Resource CRUD Operations](/guides/resource-crud-operations)
+- [Working with Pods](/guides/working-with-pods)

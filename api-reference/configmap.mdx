@@ -1,0 +1,371 @@
+---
+title: ConfigMap
+description: ConfigMap resource for storing configuration data
+---
+
+## Overview
+
+The `ConfigMap` class represents a Kubernetes ConfigMap, which holds configuration data for pods to consume. ConfigMaps allow you to decouple configuration artifacts from image content to keep containerized applications portable.
+
+## Class Definition
+
+```python
+from ocp_resources.config_map import ConfigMap
+```
+
+**API Version:** `v1`
+
+## Constructor
+
+ConfigMap accepts all parameters from [NamespacedResource](/api-reference/namespaced-resource), plus:
+
+<ParamField path="binary_data" type="dict[str, Any] | None">
+  Binary data to store. Each key must consist of alphanumeric characters, '-', '_' or '.'. BinaryData can contain byte sequences that are not in the UTF-8 range. Keys must not overlap with the `data` field.
+</ParamField>
+
+<ParamField path="data" type="dict[str, Any] | None">
+  Configuration data to store. Each key must consist of alphanumeric characters, '-', '_' or '.'. Values with non-UTF-8 byte sequences must use the `binary_data` field. Keys must not overlap with the `binary_data` field.
+</ParamField>
+
+<ParamField path="immutable" type="bool | None">
+  If set to true, ensures that data stored in the ConfigMap cannot be updated (only object metadata can be modified). If not set, the field can be modified at any time. Defaults to nil.
+</ParamField>
+
+## Properties
+
+### keys_to_hash
+
+```python
+@property
+def keys_to_hash(self) -> list[str]
+```
+
+Returns keys that should be hashed in logs: `["data", "binaryData"]`
+
+## Inherited Methods
+
+ConfigMap inherits all methods from [NamespacedResource](/api-reference/namespaced-resource) and [Resource](/api-reference/resource).
+
+## Examples
+
+### Creating a Simple ConfigMap
+
+```python
+from ocp_resources.config_map import ConfigMap
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+config_map = ConfigMap(
+    client=client,
+    name="app-config",
+    namespace="default",
+    data={
+        "database_url": "postgres://localhost:5432/mydb",
+        "log_level": "info",
+        "max_connections": "100"
+    }
+)
+config_map.create()
+
+print(f"ConfigMap {config_map.name} created")
+```
+
+### Creating a ConfigMap with File-like Data
+
+```python
+from ocp_resources.config_map import ConfigMap
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+config_map = ConfigMap(
+    client=client,
+    name="nginx-config",
+    namespace="default",
+    data={
+        "nginx.conf": """
+server {
+    listen 80;
+    server_name example.com;
+    location / {
+        proxy_pass http://backend:8080;
+    }
+}
+        """,
+        "mime.types": "text/html html htm shtml;\ntext/css css;"
+    }
+)
+config_map.create()
+
+print("Nginx ConfigMap created")
+```
+
+### Creating an Immutable ConfigMap
+
+```python
+from ocp_resources.config_map import ConfigMap
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+config_map = ConfigMap(
+    client=client,
+    name="immutable-config",
+    namespace="default",
+    immutable=True,
+    data={
+        "api_key": "fixed-api-key",
+        "version": "1.0.0"
+    }
+)
+config_map.create()
+
+print("Immutable ConfigMap created (cannot be updated)")
+```
+
+### Creating a ConfigMap with Binary Data
+
+```python
+import base64
+from ocp_resources.config_map import ConfigMap
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Read binary file and encode
+with open("/path/to/binary/file", "rb") as f:
+    binary_content = base64.b64encode(f.read()).decode("utf-8")
+
+config_map = ConfigMap(
+    client=client,
+    name="binary-config",
+    namespace="default",
+    binary_data={
+        "app.bin": binary_content
+    }
+)
+config_map.create()
+
+print("ConfigMap with binary data created")
+```
+
+### Creating a ConfigMap from Multiple Sources
+
+```python
+from ocp_resources.config_map import ConfigMap
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+config_map = ConfigMap(
+    client=client,
+    name="app-settings",
+    namespace="default",
+    data={
+        # Application configuration
+        "app.properties": "app.name=MyApp\napp.version=2.0",
+        
+        # Database configuration
+        "db.properties": "db.host=localhost\ndb.port=5432",
+        
+        # Simple key-value pairs
+        "feature_flag": "enabled",
+        "timeout": "30"
+    }
+)
+config_map.create()
+
+print("Multi-source ConfigMap created")
+```
+
+### Using ConfigMap in a Pod (Volume Mount)
+
+```python
+from ocp_resources.config_map import ConfigMap
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Create ConfigMap
+config_map = ConfigMap(
+    client=client,
+    name="app-config",
+    namespace="default",
+    data={
+        "config.json": '{"server": "localhost", "port": 8080}'
+    }
+)
+config_map.create()
+
+# Create Pod that mounts the ConfigMap
+pod = Pod(
+    client=client,
+    name="app-pod",
+    namespace="default",
+    containers=[{
+        "name": "app",
+        "image": "myapp:latest",
+        "volumeMounts": [{
+            "name": "config-volume",
+            "mountPath": "/etc/config"
+        }]
+    }],
+    volumes=[{
+        "name": "config-volume",
+        "configMap": {
+            "name": "app-config"
+        }
+    }]
+)
+pod.create()
+
+print("Pod created with ConfigMap volume")
+```
+
+### Using ConfigMap in a Pod (Environment Variables)
+
+```python
+from ocp_resources.config_map import ConfigMap
+from ocp_resources.pod import Pod
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Create ConfigMap
+config_map = ConfigMap(
+    client=client,
+    name="env-config",
+    namespace="default",
+    data={
+        "DATABASE_URL": "postgres://db:5432/myapp",
+        "LOG_LEVEL": "debug"
+    }
+)
+config_map.create()
+
+# Create Pod that uses ConfigMap as environment variables
+pod = Pod(
+    client=client,
+    name="app-pod",
+    namespace="default",
+    containers=[{
+        "name": "app",
+        "image": "myapp:latest",
+        "envFrom": [{
+            "configMapRef": {
+                "name": "env-config"
+            }
+        }]
+    }]
+)
+pod.create()
+
+print("Pod created with ConfigMap environment variables")
+```
+
+### Updating a ConfigMap
+
+```python
+from ocp_resources.config_map import ConfigMap
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+config_map = ConfigMap(
+    client=client,
+    name="app-config",
+    namespace="default"
+)
+
+# Update the data
+config_map.update({
+    "data": {
+        "database_url": "postgres://newhost:5432/mydb",
+        "log_level": "debug",
+        "new_setting": "value"
+    }
+})
+
+print("ConfigMap updated")
+```
+
+### Listing ConfigMaps
+
+```python
+from ocp_resources.config_map import ConfigMap
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# List all ConfigMaps in a namespace
+for cm in ConfigMap.get(client=client, namespace="default"):
+    print(f"ConfigMap: {cm.name}")
+    if cm.instance.data:
+        print(f"  Keys: {list(cm.instance.data.keys())}")
+    if cm.instance.binaryData:
+        print(f"  Binary Keys: {list(cm.instance.binaryData.keys())}")
+```
+
+### Using Context Manager
+
+```python
+from ocp_resources.config_map import ConfigMap
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+with ConfigMap(
+    client=client,
+    name="temp-config",
+    namespace="default",
+    data={"temp_key": "temp_value"}
+) as cm:
+    print(f"ConfigMap {cm.name} is available")
+    # ConfigMap is automatically deleted when exiting this block
+```
+
+### Creating from YAML
+
+```python
+from ocp_resources.config_map import ConfigMap
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+config_map = ConfigMap(
+    client=client,
+    yaml_file="/path/to/configmap.yaml"
+)
+config_map.create()
+```
+
+## Best Practices
+
+### Size Limitations
+ConfigMaps are stored in etcd and should not be used for large amounts of data. The recommended maximum size is 1 MiB per ConfigMap.
+
+### Immutability
+For production environments, consider making ConfigMaps immutable to:
+- Prevent accidental updates
+- Improve performance (kubelet doesn't need to watch for changes)
+- Ensure consistency across pod restarts
+
+### Mounting as Files
+When mounting ConfigMaps as volumes:
+- Each key becomes a file in the mount directory
+- File permissions default to 0644
+- Updates to the ConfigMap are reflected in mounted volumes (after a sync period)
+
+### Environment Variables
+When using ConfigMaps as environment variables:
+- Updates to the ConfigMap do NOT automatically update pod environment variables
+- Pods must be recreated to pick up new values
+
+## See Also
+
+- [NamespacedResource](/api-reference/namespaced-resource) - Base class
+- [Secret](/api-reference/secret) - For sensitive configuration data
+- [Pod](/api-reference/pod) - For using ConfigMaps in workloads
+- [Kubernetes ConfigMaps](https://kubernetes.io/docs/concepts/configuration/configmap/) - Official documentation

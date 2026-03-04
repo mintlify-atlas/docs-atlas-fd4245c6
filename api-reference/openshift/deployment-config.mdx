@@ -1,0 +1,525 @@
+---
+title: 'DeploymentConfig'
+description: 'OpenShift DeploymentConfig resource for managing application deployments'
+---
+
+## Overview
+
+The `DeploymentConfig` class represents an OpenShift DeploymentConfig object, which defines the template for a pod and manages deploying new images or configuration changes. DeploymentConfigs are OpenShift-specific resources that provide more advanced deployment strategies and triggers compared to standard Kubernetes Deployments.
+
+**API Group:** `apps.openshift.io/v1`
+
+<Note>
+  DeploymentConfig is an OpenShift-specific resource. While still supported, OpenShift recommends using standard Kubernetes Deployments for new applications. DeploymentConfigs are maintained for backward compatibility and specific OpenShift features.
+</Note>
+
+## Class Definition
+
+```python
+from ocp_resources.deployment_config import DeploymentConfig
+
+class DeploymentConfig(NamespacedResource):
+    api_group = NamespacedResource.ApiGroup.APPS_OPENSHIFT_IO
+```
+
+## Constructor
+
+```python
+DeploymentConfig(
+    name=None,
+    namespace=None,
+    client=None,
+    replicas=None,
+    selector=None,
+    template=None,
+    strategy=None,
+    triggers=None,
+    revision_history_limit=None,
+    min_ready_seconds=None,
+    paused=None,
+    teardown=True,
+    yaml_file=None,
+    delete_timeout=TIMEOUT_4MINUTES,
+    **kwargs
+)
+```
+
+### Parameters
+
+<ParamField path="name" type="str" default="None">
+  Name of the DeploymentConfig resource. If not provided, it must be specified in the YAML file.
+</ParamField>
+
+<ParamField path="namespace" type="str" default="None">
+  Namespace where the DeploymentConfig will be created. Required for namespaced resources.
+</ParamField>
+
+<ParamField path="client" type="DynamicClient" default="None">
+  Kubernetes dynamic client for API communication. If not provided, the default client will be used.
+</ParamField>
+
+<ParamField path="replicas" type="int" default="None">
+  Number of desired pod replicas. Defaults to 1 if not specified.
+</ParamField>
+
+<ParamField path="selector" type="dict[str, Any]" default="None">
+  Label selector for pods. Must match the labels in the pod template.
+  
+  Example:
+  ```python
+  {"app": "my-app", "deploymentconfig": "my-app"}
+  ```
+</ParamField>
+
+<ParamField path="template" type="dict[str, Any]" default="None">
+  Pod template specification. Describes the pods that will be created.
+  
+  Example:
+  ```python
+  {
+      "metadata": {
+          "labels": {"app": "my-app"}
+      },
+      "spec": {
+          "containers": [
+              {
+                  "name": "app",
+                  "image": "my-app:latest",
+                  "ports": [{"containerPort": 8080}]
+              }
+          ]
+      }
+  }
+  ```
+</ParamField>
+
+<ParamField path="strategy" type="dict[str, Any]" default="None">
+  Deployment strategy specification. Defines how the deployment should be executed (Rolling, Recreate, or Custom).
+  
+  Example for Rolling strategy:
+  ```python
+  {
+      "type": "Rolling",
+      "rollingParams": {
+          "updatePeriodSeconds": 1,
+          "intervalSeconds": 1,
+          "timeoutSeconds": 600,
+          "maxUnavailable": "25%",
+          "maxSurge": "25%"
+      }
+  }
+  ```
+</ParamField>
+
+<ParamField path="triggers" type="list[dict[str, Any]]" default="None">
+  List of triggers that automatically start a new deployment. Common trigger types include ConfigChange and ImageChange.
+  
+  Example:
+  ```python
+  [
+      {"type": "ConfigChange"},
+      {
+          "type": "ImageChange",
+          "imageChangeParams": {
+              "automatic": True,
+              "containerNames": ["app"],
+              "from": {
+                  "kind": "ImageStreamTag",
+                  "name": "my-app:latest"
+              }
+          }
+      }
+  ]
+  ```
+</ParamField>
+
+<ParamField path="revision_history_limit" type="int" default="None">
+  Number of old ReplicationControllers to retain for rollback. Defaults to 10.
+</ParamField>
+
+<ParamField path="min_ready_seconds" type="int" default="None">
+  Minimum number of seconds for which a newly created pod should be ready without any containers crashing. Defaults to 0.
+</ParamField>
+
+<ParamField path="paused" type="bool" default="None">
+  Indicates whether the deployment is paused. Paused deployments do not automatically deploy new versions.
+</ParamField>
+
+<ParamField path="teardown" type="bool" default="True">
+  If True, the resource will be automatically deleted when used as a context manager.
+</ParamField>
+
+<ParamField path="yaml_file" type="str" default="None">
+  Path to a YAML file containing the DeploymentConfig definition. If provided, the DeploymentConfig will be created from this file.
+</ParamField>
+
+<ParamField path="delete_timeout" type="int" default="TIMEOUT_4MINUTES">
+  Timeout in seconds for delete operations. Defaults to 4 minutes.
+</ParamField>
+
+<ParamField path="**kwargs" type="Any">
+  Additional keyword arguments passed to the parent `NamespacedResource` class. Common options include `label` and `annotations`.
+</ParamField>
+
+## Usage Examples
+
+### Basic DeploymentConfig
+
+Create a simple DeploymentConfig:
+
+```python
+from ocp_resources.deployment_config import DeploymentConfig
+
+dc = DeploymentConfig(
+    name="my-app",
+    namespace="default",
+    replicas=3,
+    selector={"app": "my-app"},
+    template={
+        "metadata": {
+            "labels": {"app": "my-app"}
+        },
+        "spec": {
+            "containers": [
+                {
+                    "name": "app",
+                    "image": "my-registry/my-app:v1.0",
+                    "ports": [{"containerPort": 8080}]
+                }
+            ]
+        }
+    },
+    triggers=[
+        {"type": "ConfigChange"}
+    ]
+)
+dc.deploy()
+```
+
+### DeploymentConfig with ImageStream Trigger
+
+Create a DeploymentConfig that automatically deploys when the ImageStream changes:
+
+```python
+from ocp_resources.deployment_config import DeploymentConfig
+
+dc = DeploymentConfig(
+    name="auto-deploy-app",
+    namespace="default",
+    replicas=2,
+    selector={"app": "auto-deploy-app"},
+    template={
+        "metadata": {
+            "labels": {"app": "auto-deploy-app"}
+        },
+        "spec": {
+            "containers": [
+                {
+                    "name": "app",
+                    "image": "auto-deploy-app:latest",
+                    "ports": [{"containerPort": 8080}]
+                }
+            ]
+        }
+    },
+    triggers=[
+        {"type": "ConfigChange"},
+        {
+            "type": "ImageChange",
+            "imageChangeParams": {
+                "automatic": True,
+                "containerNames": ["app"],
+                "from": {
+                    "kind": "ImageStreamTag",
+                    "name": "auto-deploy-app:latest"
+                }
+            }
+        }
+    ]
+)
+dc.deploy()
+```
+
+### Rolling Deployment Strategy
+
+Create a DeploymentConfig with a custom rolling deployment strategy:
+
+```python
+from ocp_resources.deployment_config import DeploymentConfig
+
+dc = DeploymentConfig(
+    name="rolling-app",
+    namespace="default",
+    replicas=5,
+    selector={"app": "rolling-app"},
+    template={
+        "metadata": {
+            "labels": {"app": "rolling-app"}
+        },
+        "spec": {
+            "containers": [
+                {
+                    "name": "app",
+                    "image": "rolling-app:v2.0",
+                    "ports": [{"containerPort": 8080}],
+                    "readinessProbe": {
+                        "httpGet": {
+                            "path": "/health",
+                            "port": 8080
+                        },
+                        "initialDelaySeconds": 5,
+                        "periodSeconds": 10
+                    }
+                }
+            ]
+        }
+    },
+    strategy={
+        "type": "Rolling",
+        "rollingParams": {
+            "updatePeriodSeconds": 1,
+            "intervalSeconds": 1,
+            "timeoutSeconds": 600,
+            "maxUnavailable": "25%",
+            "maxSurge": "25%",
+            "pre": {
+                "failurePolicy": "Abort",
+                "execNewPod": {
+                    "command": ["/bin/sh", "-c", "echo pre-deployment hook"],
+                    "containerName": "app"
+                }
+            }
+        }
+    }
+)
+dc.deploy()
+```
+
+### Recreate Deployment Strategy
+
+Create a DeploymentConfig with Recreate strategy for applications that cannot run multiple versions:
+
+```python
+from ocp_resources.deployment_config import DeploymentConfig
+
+dc = DeploymentConfig(
+    name="database-app",
+    namespace="default",
+    replicas=1,
+    selector={"app": "database-app"},
+    template={
+        "metadata": {
+            "labels": {"app": "database-app"}
+        },
+        "spec": {
+            "containers": [
+                {
+                    "name": "db",
+                    "image": "postgres:13",
+                    "env": [
+                        {"name": "POSTGRES_PASSWORD", "value": "secret"}
+                    ],
+                    "ports": [{"containerPort": 5432}]
+                }
+            ]
+        }
+    },
+    strategy={
+        "type": "Recreate",
+        "recreateParams": {
+            "timeoutSeconds": 600
+        }
+    }
+)
+dc.deploy()
+```
+
+### Creating from YAML
+
+Create a DeploymentConfig from a YAML file:
+
+```python
+from ocp_resources.deployment_config import DeploymentConfig
+
+dc = DeploymentConfig(
+    namespace="default",
+    yaml_file="deploymentconfig.yaml"
+)
+dc.deploy()
+```
+
+### Using Context Manager
+
+Automatically clean up the DeploymentConfig after use:
+
+```python
+from ocp_resources.deployment_config import DeploymentConfig
+
+with DeploymentConfig(
+    name="temp-dc",
+    namespace="default",
+    yaml_file="temp-deploymentconfig.yaml"
+) as dc:
+    # Wait for rollout
+    dc.wait_for_replicas()
+    # DeploymentConfig is automatically deleted when exiting
+```
+
+## Deployment Strategies
+
+### Rolling Strategy
+
+Gradually replaces old pods with new ones, maintaining availability:
+
+```python
+strategy={
+    "type": "Rolling",
+    "rollingParams": {
+        "updatePeriodSeconds": 1,      # Time between pod updates
+        "intervalSeconds": 1,           # Time between checks
+        "timeoutSeconds": 600,          # Maximum deployment time
+        "maxUnavailable": "25%",        # Max pods that can be unavailable
+        "maxSurge": "25%"               # Max additional pods during update
+    }
+}
+```
+
+### Recreate Strategy
+
+Terminates all old pods before creating new ones:
+
+```python
+strategy={
+    "type": "Recreate",
+    "recreateParams": {
+        "timeoutSeconds": 600,
+        "mid": {                        # Mid-lifecycle hook
+            "failurePolicy": "Abort",
+            "execNewPod": {
+                "command": ["/bin/migrate"],
+                "containerName": "app"
+            }
+        }
+    }
+}
+```
+
+### Custom Strategy
+
+Uses a custom deployment process:
+
+```python
+strategy={
+    "type": "Custom",
+    "customParams": {
+        "image": "custom-deployer:latest",
+        "command": ["/bin/deploy"],
+        "environment": [
+            {"name": "CUSTOM_VAR", "value": "value"}
+        ]
+    }
+}
+```
+
+## Lifecycle Hooks
+
+DeploymentConfigs support lifecycle hooks for executing tasks during deployment:
+
+### Pre Hook
+
+Executes before the deployment starts:
+
+```python
+"pre": {
+    "failurePolicy": "Abort",
+    "execNewPod": {
+        "command": ["/bin/sh", "-c", "echo Starting deployment"],
+        "containerName": "app",
+        "env": [{"name": "HOOK_TYPE", "value": "pre"}]
+    }
+}
+```
+
+### Mid Hook (Recreate only)
+
+Executes after old pods are scaled down but before new pods are created:
+
+```python
+"mid": {
+    "failurePolicy": "Abort",
+    "execNewPod": {
+        "command": ["/bin/migrate"],
+        "containerName": "app"
+    }
+}
+```
+
+### Post Hook
+
+Executes after the deployment completes:
+
+```python
+"post": {
+    "failurePolicy": "Ignore",
+    "execNewPod": {
+        "command": ["/bin/sh", "-c", "echo Deployment complete"],
+        "containerName": "app"
+    }
+}
+```
+
+## Triggers
+
+### Configuration Change Trigger
+
+Automatically starts a new deployment when the DeploymentConfig changes:
+
+```python
+triggers=[{"type": "ConfigChange"}]
+```
+
+### Image Change Trigger
+
+Automatically starts a new deployment when the specified image changes:
+
+```python
+triggers=[
+    {
+        "type": "ImageChange",
+        "imageChangeParams": {
+            "automatic": True,
+            "containerNames": ["app"],
+            "from": {
+                "kind": "ImageStreamTag",
+                "name": "my-app:latest",
+                "namespace": "default"
+            },
+            "lastTriggeredImage": ""  # Updated automatically
+        }
+    }
+]
+```
+
+## DeploymentConfig vs Deployment
+
+| Feature | DeploymentConfig | Deployment |
+|---------|------------------|------------|
+| API | OpenShift-specific | Kubernetes standard |
+| Strategies | Rolling, Recreate, Custom | RollingUpdate, Recreate |
+| Lifecycle Hooks | Yes (pre, mid, post) | No |
+| Image Triggers | Yes | No (use external tools) |
+| Custom Deployer | Yes | No |
+| Recommendation | Legacy/specific features | Preferred for new apps |
+
+## Related Resources
+
+- [Deployment](/api-reference/deployment) - Kubernetes standard deployment
+- [ReplicationController](/api-reference/replication-controller) - Created by DeploymentConfig
+- [ImageStream](/api-reference/openshift/image-stream) - Used with ImageChange triggers
+- [OpenShift DeploymentConfig Documentation](https://docs.openshift.com/container-platform/latest/applications/deployments/what-deployments-are.html)
+
+## See Also
+
+- [Working with Deployments Guide](/guides/working-with-deployments)
+- [Core Concepts: Resources](/core-concepts/resources)
+- [NamespacedResource Base Class](/api-reference/namespaced-resource)

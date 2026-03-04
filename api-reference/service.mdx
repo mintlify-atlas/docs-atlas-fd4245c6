@@ -1,0 +1,399 @@
+---
+title: Service
+description: Service resource for exposing network access to Pods
+---
+
+## Overview
+
+The `Service` class represents a Kubernetes Service - a named abstraction of software service consisting of a local port that the proxy listens on and a selector that determines which pods answer requests sent through the proxy.
+
+## Class Definition
+
+```python
+from ocp_resources.service import Service
+```
+
+**API Version:** `v1`
+
+## Constructor
+
+Service accepts all parameters from [NamespacedResource](/api-reference/namespaced-resource), plus:
+
+<ParamField path="allocate_load_balancer_node_ports" type="bool | None">
+  Defines if NodePorts will be automatically allocated for services with type LoadBalancer. Default is true.
+</ParamField>
+
+<ParamField path="cluster_ip" type="str | None">
+  IP address of the service. Usually assigned randomly. Setting to "None" creates a headless service.
+</ParamField>
+
+<ParamField path="cluster_ips" type="list[Any] | None">
+  List of IP addresses assigned to this service (for dual-stack support)
+</ParamField>
+
+<ParamField path="external_ips" type="list[Any] | None">
+  List of IP addresses for which nodes in the cluster will accept traffic
+</ParamField>
+
+<ParamField path="external_name" type="str | None">
+  External reference for ExternalName type services (e.g., a DNS CNAME record)
+</ParamField>
+
+<ParamField path="external_traffic_policy" type="str | None">
+  How nodes distribute service traffic. Values: `Cluster`, `Local`
+</ParamField>
+
+<ParamField path="health_check_node_port" type="int | None">
+  Health check nodePort for LoadBalancer services with Local externalTrafficPolicy
+</ParamField>
+
+<ParamField path="internal_traffic_policy" type="str | None">
+  How nodes distribute service traffic on ClusterIP. Values: `Cluster`, `Local`
+</ParamField>
+
+<ParamField path="ip_families" type="list[Any] | None">
+  List of IP families (e.g., IPv4, IPv6) assigned to this service
+</ParamField>
+
+<ParamField path="ip_family_policy" type="str | None">
+  Dual-stack policy. Values: `SingleStack`, `PreferDualStack`, `RequireDualStack`
+</ParamField>
+
+<ParamField path="load_balancer_class" type="str | None">
+  Class of the load balancer implementation this Service belongs to
+</ParamField>
+
+<ParamField path="load_balancer_ip" type="str | None">
+  LoadBalancer IP when type is LoadBalancer (deprecated)
+</ParamField>
+
+<ParamField path="load_balancer_source_ranges" type="list[Any] | None">
+  Restrict traffic through cloud-provider load-balancer to specified client IPs
+</ParamField>
+
+<ParamField path="ports" type="list[Any] | None">
+  List of ports exposed by this service. Each port should be a dict with `port`, `targetPort`, `protocol`, etc.
+</ParamField>
+
+<ParamField path="publish_not_ready_addresses" type="bool | None">
+  Indicates that endpoints should include not-ready addresses. Used for StatefulSet headless services.
+</ParamField>
+
+<ParamField path="selector" type="dict[str, Any] | None">
+  Route service traffic to pods with matching label keys and values
+</ParamField>
+
+<ParamField path="session_affinity" type="str | None">
+  Session affinity. Values: `ClientIP`, `None`. Defaults to None.
+</ParamField>
+
+<ParamField path="session_affinity_config" type="dict[str, Any] | None">
+  Configuration for session affinity
+</ParamField>
+
+<ParamField path="traffic_distribution" type="str | None">
+  Express preferences for how traffic is distributed to Service endpoints
+</ParamField>
+
+<ParamField path="type" type="str | None">
+  Service type. Values: `ClusterIP`, `NodePort`, `LoadBalancer`, `ExternalName`. Defaults to ClusterIP.
+</ParamField>
+
+## Inherited Methods
+
+Service inherits all methods from [NamespacedResource](/api-reference/namespaced-resource) and [Resource](/api-reference/resource).
+
+## Examples
+
+### Creating a ClusterIP Service
+
+```python
+from ocp_resources.service import Service
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+service = Service(
+    client=client,
+    name="my-service",
+    namespace="default",
+    selector={"app": "myapp"},
+    ports=[{
+        "protocol": "TCP",
+        "port": 80,
+        "targetPort": 8080
+    }]
+)
+service.create()
+
+print(f"Service {service.name} created")
+```
+
+### Creating a NodePort Service
+
+```python
+from ocp_resources.service import Service
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+service = Service(
+    client=client,
+    name="nodeport-service",
+    namespace="default",
+    type="NodePort",
+    selector={"app": "myapp"},
+    ports=[{
+        "protocol": "TCP",
+        "port": 80,
+        "targetPort": 8080,
+        "nodePort": 30080  # Optional, auto-assigned if not specified
+    }]
+)
+service.create()
+
+print(f"Service accessible on port {service.instance.spec.ports[0].nodePort}")
+```
+
+### Creating a LoadBalancer Service
+
+```python
+from ocp_resources.service import Service
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+service = Service(
+    client=client,
+    name="loadbalancer-service",
+    namespace="default",
+    type="LoadBalancer",
+    selector={"app": "myapp"},
+    ports=[{
+        "protocol": "TCP",
+        "port": 80,
+        "targetPort": 8080
+    }]
+)
+service.create()
+
+# Wait for LoadBalancer to be provisioned
+service.wait_for_condition(
+    condition="LoadBalancerReady",
+    status="True",
+    timeout=300
+)
+
+print(f"LoadBalancer IP: {service.instance.status.loadBalancer.ingress[0].ip}")
+```
+
+### Creating a Headless Service
+
+```python
+from ocp_resources.service import Service
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Headless service (no cluster IP)
+service = Service(
+    client=client,
+    name="headless-service",
+    namespace="default",
+    cluster_ip="None",  # Makes it headless
+    selector={"app": "statefulapp"},
+    ports=[{
+        "protocol": "TCP",
+        "port": 80,
+        "targetPort": 8080
+    }]
+)
+service.create()
+
+print("Headless service created for direct pod access")
+```
+
+### Creating an ExternalName Service
+
+```python
+from ocp_resources.service import Service
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+service = Service(
+    client=client,
+    name="external-service",
+    namespace="default",
+    type="ExternalName",
+    external_name="my.database.example.com"
+)
+service.create()
+
+print("ExternalName service created")
+```
+
+### Service with Multiple Ports
+
+```python
+from ocp_resources.service import Service
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+service = Service(
+    client=client,
+    name="multi-port-service",
+    namespace="default",
+    selector={"app": "myapp"},
+    ports=[
+        {
+            "name": "http",
+            "protocol": "TCP",
+            "port": 80,
+            "targetPort": 8080
+        },
+        {
+            "name": "https",
+            "protocol": "TCP",
+            "port": 443,
+            "targetPort": 8443
+        },
+        {
+            "name": "metrics",
+            "protocol": "TCP",
+            "port": 9090,
+            "targetPort": 9090
+        }
+    ]
+)
+service.create()
+
+print("Multi-port service created")
+```
+
+### Service with Session Affinity
+
+```python
+from ocp_resources.service import Service
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+service = Service(
+    client=client,
+    name="sticky-service",
+    namespace="default",
+    selector={"app": "myapp"},
+    session_affinity="ClientIP",
+    session_affinity_config={
+        "clientIP": {
+            "timeoutSeconds": 3600
+        }
+    },
+    ports=[{
+        "protocol": "TCP",
+        "port": 80,
+        "targetPort": 8080
+    }]
+)
+service.create()
+
+print("Service with session affinity created")
+```
+
+### Service with External IPs
+
+```python
+from ocp_resources.service import Service
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+service = Service(
+    client=client,
+    name="external-ip-service",
+    namespace="default",
+    selector={"app": "myapp"},
+    external_ips=["192.168.1.100", "192.168.1.101"],
+    ports=[{
+        "protocol": "TCP",
+        "port": 80,
+        "targetPort": 8080
+    }]
+)
+service.create()
+
+print("Service with external IPs created")
+```
+
+### Listing Services
+
+```python
+from ocp_resources.service import Service
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# List all services in a namespace
+for svc in Service.get(client=client, namespace="default"):
+    print(f"Service: {svc.name}")
+    print(f"  Type: {svc.instance.spec.type}")
+    print(f"  ClusterIP: {svc.instance.spec.clusterIP}")
+    print(f"  Ports: {[p.port for p in svc.instance.spec.ports]}")
+```
+
+### Using Context Manager
+
+```python
+from ocp_resources.service import Service
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+with Service(
+    client=client,
+    name="temp-service",
+    namespace="default",
+    selector={"app": "temp"},
+    ports=[{"protocol": "TCP", "port": 80, "targetPort": 8080}]
+) as svc:
+    print(f"Service {svc.name} is available at {svc.instance.spec.clusterIP}")
+    # Service is automatically deleted when exiting this block
+```
+
+### Creating from YAML
+
+```python
+from ocp_resources.service import Service
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+service = Service(
+    client=client,
+    yaml_file="/path/to/service.yaml"
+)
+service.create()
+```
+
+## Service Types
+
+### ClusterIP (Default)
+Exposes the service on a cluster-internal IP. The service is only reachable from within the cluster.
+
+### NodePort
+Exposes the service on each Node's IP at a static port. A ClusterIP service is automatically created.
+
+### LoadBalancer
+Exposes the service externally using a cloud provider's load balancer. NodePort and ClusterIP services are automatically created.
+
+### ExternalName
+Maps the service to an external DNS name. No proxying is set up.
+
+## See Also
+
+- [NamespacedResource](/api-reference/namespaced-resource) - Base class
+- [Pod](/api-reference/pod) - Container workloads
+- [Deployment](/api-reference/deployment) - For managing pod replicas
+- [Ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/) - For HTTP/HTTPS routing

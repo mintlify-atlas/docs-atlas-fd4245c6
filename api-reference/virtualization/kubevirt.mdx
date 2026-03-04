@@ -1,0 +1,319 @@
+---
+title: 'KubeVirt'
+description: 'KubeVirt resource for managing the KubeVirt virtualization platform'
+icon: 'layer-group'
+---
+
+## Overview
+
+The `KubeVirt` class represents the primary resource for deploying and configuring the KubeVirt virtualization platform in an OpenShift cluster. It manages all KubeVirt infrastructure components and provides cluster-wide virtualization configuration.
+
+## Class Definition
+
+```python
+from ocp_resources.kubevirt import KubeVirt
+
+class KubeVirt(NamespacedResource):
+    api_group = NamespacedResource.ApiGroup.KUBEVIRT_IO
+```
+
+## Constructor
+
+<ParamField path="certificate_rotate_strategy" type="dict">
+  Configuration for certificate rotation strategy.
+</ParamField>
+
+<ParamField path="configuration" type="dict">
+  KubeVirt configuration settings, equivalent to the `virt-config` ConfigMap.
+</ParamField>
+
+<ParamField path="customize_components" type="dict">
+  Customization options for KubeVirt components.
+</ParamField>
+
+<ParamField path="image_pull_policy" type="string">
+  Image pull policy for KubeVirt containers: `"Always"`, `"IfNotPresent"`, or `"Never"`.
+</ParamField>
+
+<ParamField path="image_pull_secrets" type="list">
+  List of image pull secrets for accessing private container registries.
+</ParamField>
+
+<ParamField path="image_registry" type="string">
+  Container image registry to pull KubeVirt images from. Defaults to the operator's registry.
+</ParamField>
+
+<ParamField path="image_tag" type="string">
+  Tag for KubeVirt container images. Defaults to the operator's image tag.
+</ParamField>
+
+<ParamField path="infra" type="dict">
+  Node selectors and tolerations for KubeVirt infrastructure components.
+</ParamField>
+
+<ParamField path="monitor_account" type="string">
+  Prometheus service account name for monitoring KubeVirt endpoints. Defaults to `"prometheus-k8s"`.
+</ParamField>
+
+<ParamField path="monitor_namespace" type="string">
+  Namespace where Prometheus is deployed. Defaults to `"openshift-monitor"`.
+</ParamField>
+
+<ParamField path="product_component" type="string">
+  Value for the `apps.kubevirt.io/component` label. Defaults to `"kubevirt"` if not specified.
+</ParamField>
+
+<ParamField path="product_name" type="string">
+  Value for the `apps.kubevirt.io/part-of` label. Useful when KubeVirt is part of a larger product.
+</ParamField>
+
+<ParamField path="product_version" type="string">
+  Value for the `apps.kubevirt.io/version` label. Defaults to KubeVirt's version if not specified.
+</ParamField>
+
+<ParamField path="service_monitor_namespace" type="string">
+  Namespace for deploying ServiceMonitor objects. If not set, uses `monitor_namespace`.
+</ParamField>
+
+<ParamField path="uninstall_strategy" type="string">
+  Controls whether KubeVirt can be deleted when workloads are present. Prevents accidental data loss.
+</ParamField>
+
+<ParamField path="workload_update_strategy" type="dict">
+  Cluster-wide strategy for handling automated workload updates.
+</ParamField>
+
+<ParamField path="workloads" type="dict">
+  Node selectors and tolerations that apply to KubeVirt workload pods (VMs).
+</ParamField>
+
+## Usage Examples
+
+<CodeGroup>
+
+```python Basic KubeVirt deployment
+from ocp_resources.kubevirt import KubeVirt
+from ocp_resources.resource import get_client
+
+client = get_client()
+
+# Deploy KubeVirt with default settings
+kubevirt = KubeVirt(
+    client=client,
+    name="kubevirt",
+    namespace="openshift-cnv"
+)
+
+kubevirt.create()
+kubevirt.wait_for_condition(
+    condition="Available",
+    status="True",
+    timeout=600
+)
+```
+
+```python Custom configuration
+# KubeVirt with custom configuration
+kubevirt = KubeVirt(
+    client=client,
+    name="kubevirt",
+    namespace="openshift-cnv",
+    configuration={
+        "developerConfiguration": {
+            "featureGates": [
+                "LiveMigration",
+                "HotplugVolumes"
+            ]
+        },
+        "networkConfiguration": {
+            "defaultNetworkInterface": "bridge"
+        }
+    },
+    image_pull_policy="IfNotPresent"
+)
+
+kubevirt.create()
+```
+
+```python Infrastructure placement
+# Configure node placement for infrastructure components
+kubevirt = KubeVirt(
+    client=client,
+    name="kubevirt",
+    namespace="openshift-cnv",
+    infra={
+        "nodePlacement": {
+            "nodeSelector": {
+                "node-role.kubernetes.io/infra": ""
+            },
+            "tolerations": [
+                {
+                    "key": "node-role.kubernetes.io/infra",
+                    "operator": "Exists",
+                    "effect": "NoSchedule"
+                }
+            ]
+        }
+    },
+    workloads={
+        "nodePlacement": {
+            "nodeSelector": {
+                "node-role.kubernetes.io/worker": ""
+            }
+        }
+    }
+)
+
+kubevirt.create()
+```
+
+```python Custom image registry
+# Use custom container registry
+kubevirt = KubeVirt(
+    client=client,
+    name="kubevirt",
+    namespace="openshift-cnv",
+    image_registry="registry.example.com/kubevirt",
+    image_tag="v1.0.0",
+    image_pull_policy="Always",
+    image_pull_secrets=[
+        {"name": "registry-secret"}
+    ]
+)
+
+kubevirt.create()
+```
+
+```python Monitoring configuration
+# Configure Prometheus monitoring
+kubevirt = KubeVirt(
+    client=client,
+    name="kubevirt",
+    namespace="openshift-cnv",
+    monitor_namespace="openshift-monitoring",
+    monitor_account="prometheus-k8s",
+    service_monitor_namespace="openshift-monitoring"
+)
+
+kubevirt.create()
+```
+
+```python Product branding
+# Configure product labels
+kubevirt = KubeVirt(
+    client=client,
+    name="kubevirt",
+    namespace="openshift-cnv",
+    product_name="OpenShift Virtualization",
+    product_version="4.14",
+    product_component="cnv"
+)
+
+kubevirt.create()
+```
+
+```python Workload update strategy
+# Configure workload update strategy
+kubevirt = KubeVirt(
+    client=client,
+    name="kubevirt",
+    namespace="openshift-cnv",
+    workload_update_strategy={
+        "workloadUpdateMethods": ["LiveMigrate"],
+        "batchEvictionSize": 10,
+        "batchEvictionInterval": "1m"
+    },
+    uninstall_strategy="BlockUninstallIfWorkloadsExist"
+)
+
+kubevirt.create()
+```
+
+</CodeGroup>
+
+## Configuration Options
+
+### Feature Gates
+
+Common feature gates that can be enabled in the `configuration` parameter:
+
+- `LiveMigration`: Enable live migration of VMs between nodes
+- `HotplugVolumes`: Allow hotplugging of volumes to running VMs
+- `CPUManager`: Enable CPU manager integration
+- `GPU`: Enable GPU passthrough support
+- `HostDevices`: Enable host device passthrough
+- `Snapshot`: Enable VM snapshot support
+- `HotplugNICs`: Allow hotplugging of network interfaces
+
+### Network Configuration
+
+Network-related configuration options:
+
+```python
+configuration={
+    "networkConfiguration": {
+        "defaultNetworkInterface": "bridge",  # or "masquerade"
+        "permitSlirpInterface": True,
+        "permitBridgeInterfaceOnPodNetwork": False
+    }
+}
+```
+
+### Developer Configuration
+
+Developer and debugging options:
+
+```python
+configuration={
+    "developerConfiguration": {
+        "featureGates": ["FeatureName"],
+        "logVerbosity": {
+            "virtAPI": 2,
+            "virtController": 2,
+            "virtHandler": 2,
+            "virtLauncher": 2
+        }
+    }
+}
+```
+
+## Status Conditions
+
+The KubeVirt resource reports the following conditions:
+
+- `Available`: All KubeVirt components are ready
+- `Progressing`: KubeVirt is being deployed or updated
+- `Degraded`: One or more components are not functioning properly
+
+```python
+# Check if KubeVirt is available
+if kubevirt.instance.status.conditions:
+    for condition in kubevirt.instance.status.conditions:
+        if condition.type == "Available" and condition.status == "True":
+            print("KubeVirt is available")
+```
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="VirtualMachine" icon="computer" href="/api-reference/virtualization/virtual-machine">
+    Create and manage virtual machines
+  </Card>
+  <Card title="DataVolume" icon="database" href="/api-reference/virtualization/data-volume">
+    Manage persistent storage for VMs
+  </Card>
+</CardGroup>
+
+## Notes
+
+<Info>
+The KubeVirt resource is typically deployed by the OpenShift Virtualization operator. Manual creation is only needed for custom deployments or advanced configurations.
+</Info>
+
+<Warning>
+Changing certain configuration options (like `image_registry` or `image_tag`) may trigger a rolling update of all KubeVirt components and could cause brief service interruptions.
+</Warning>
+
+<Tip>
+Use the `uninstall_strategy` parameter set to `"BlockUninstallIfWorkloadsExist"` to prevent accidental deletion of KubeVirt when VMs are still running.
+</Tip>

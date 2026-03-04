@@ -1,0 +1,662 @@
+---
+title: MCP Server
+description: Model Context Protocol server for AI-powered cluster management
+icon: robot
+---
+
+The OpenShift Python Wrapper MCP Server provides powerful tools to interact with OpenShift/Kubernetes clusters using the Model Context Protocol (MCP). Integrate cluster management directly into AI assistants like Claude Desktop and Cursor.
+
+## Quick Start
+
+### Prerequisites
+
+<CardGroup cols={3}>
+
+<Card title="Python 3.8+" icon="python">
+Required runtime environment
+</Card>
+
+<Card title="Cluster Access" icon="server">
+OpenShift or Kubernetes cluster
+</Card>
+
+<Card title="Kubeconfig" icon="key">
+Valid kubeconfig file
+</Card>
+
+</CardGroup>
+
+### Installation
+
+<CodeGroup>
+
+```bash uv (Recommended)
+uv tool install openshift-python-wrapper
+```
+
+```bash pip
+pip install openshift-python-wrapper
+```
+
+</CodeGroup>
+
+### Running the Server
+
+```bash
+# Run the MCP server
+openshift-mcp-server
+```
+
+For development or running from source:
+
+```bash
+# Clone the repository
+git clone https://github.com/RedHatQE/openshift-python-wrapper.git
+cd openshift-python-wrapper
+
+# Run directly
+uv run mcp_server/server.py
+```
+
+## Available Tools
+
+The MCP server provides comprehensive tools for managing Kubernetes and OpenShift resources.
+
+### Resource Management
+
+#### list_resources
+
+List Kubernetes/OpenShift resources with filtering capabilities.
+
+**Parameters:**
+- `resource_type` (required): Type of resource (e.g., "pod", "deployment")
+- `namespace` (optional): Namespace to search in
+- `label_selector` (optional): Filter by labels (e.g., "app=nginx")
+- `field_selector` (optional): Filter by fields
+- `limit` (optional): Maximum number of results
+
+<CodeGroup>
+
+```python Basic Listing
+# List all pods in the default namespace
+list_resources(resource_type="pod", namespace="default")
+```
+
+```python With Label Selector
+# List deployments with specific label
+list_resources(
+    resource_type="deployment",
+    label_selector="app=frontend"
+)
+```
+
+```python With Limit
+# List first 10 services
+list_resources(
+    resource_type="service",
+    namespace="production",
+    limit=10
+)
+```
+
+</CodeGroup>
+
+#### get_resource
+
+Get detailed information about a specific resource.
+
+**Parameters:**
+- `resource_type` (required): Type of resource
+- `name` (required): Resource name
+- `namespace` (optional): Namespace (required for namespaced resources)
+- `output_format` (optional): Format - "info", "yaml", "json", "wide" (default: "info")
+
+<CodeGroup>
+
+```python YAML Format
+# Get pod details in YAML format
+get_resource(
+    resource_type="pod",
+    name="nginx",
+    namespace="default",
+    output_format="yaml"
+)
+```
+
+```python JSON Format
+# Get deployment as JSON
+get_resource(
+    resource_type="deployment",
+    name="backend",
+    namespace="production",
+    output_format="json"
+)
+```
+
+</CodeGroup>
+
+#### create_resource
+
+Create a new resource from YAML or specifications.
+
+**Parameters:**
+- `resource_type` (required): Type of resource
+- `name` (required): Resource name
+- `namespace` (optional): Namespace for namespaced resources
+- `yaml_content` (optional): Complete YAML definition
+- `spec` (optional): Resource specification as dict
+- `labels` (optional): Labels to apply
+- `annotations` (optional): Annotations to apply
+- `wait` (optional): Wait for resource to be ready
+
+<CodeGroup>
+
+```python Simple Creation
+# Create a namespace
+create_resource(
+    resource_type="namespace",
+    name="test-ns",
+    spec={}
+)
+```
+
+```python From YAML
+# Create from YAML
+yaml = """
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+spec:
+  containers:
+  - name: nginx
+    image: nginx:latest
+"""
+create_resource(
+    resource_type="pod",
+    name="nginx",
+    yaml_content=yaml
+)
+```
+
+</CodeGroup>
+
+#### update_resource
+
+Update an existing resource using patch operations.
+
+**Parameters:**
+- `resource_type` (required): Type of resource
+- `name` (required): Resource name
+- `namespace` (optional): Namespace
+- `patch` (required): Patch data as dict
+- `patch_type` (optional): "merge", "strategic", "json" (default: "merge")
+
+```python
+# Scale a deployment
+update_resource(
+    resource_type="deployment",
+    name="my-app",
+    namespace="default",
+    patch={"spec": {"replicas": 3}}
+)
+```
+
+#### delete_resource
+
+Delete a resource.
+
+**Parameters:**
+- `resource_type` (required): Type of resource
+- `name` (required): Resource name
+- `namespace` (optional): Namespace
+- `wait` (optional): Wait for deletion to complete (default: true)
+- `timeout` (optional): Deletion timeout in seconds (default: 60)
+
+```python
+# Delete a pod
+delete_resource(
+    resource_type="pod",
+    name="nginx",
+    namespace="default"
+)
+```
+
+#### apply_yaml
+
+Apply YAML manifests containing one or more resources.
+
+**Parameters:**
+- `yaml_content` (required): YAML content with one or more resources
+- `namespace` (optional): Default namespace for resources without namespace
+
+```python
+yaml_content = """
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-app
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: test-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+"""
+apply_yaml(yaml_content=yaml_content)
+```
+
+### Pod Operations
+
+#### get_pod_logs
+
+Retrieve logs from pod containers.
+
+**Parameters:**
+- `name` (required): Pod name
+- `namespace` (required): Namespace
+- `container` (optional): Container name (for multi-container pods)
+- `tail_lines` (optional): Number of lines from end
+- `since_seconds` (optional): Logs since N seconds ago
+- `previous` (optional): Get logs from previous container instance
+
+<CodeGroup>
+
+```python Tail Logs
+# Get last 100 lines of logs
+get_pod_logs(
+    name="my-app-abc123",
+    namespace="production",
+    tail_lines=100
+)
+```
+
+```python Time-based
+# Get logs from last hour
+get_pod_logs(
+    name="my-app-abc123",
+    namespace="production",
+    since_seconds=3600
+)
+```
+
+```python Previous Container
+# Get logs from crashed container
+get_pod_logs(
+    name="my-app-abc123",
+    namespace="production",
+    previous=True
+)
+```
+
+</CodeGroup>
+
+#### exec_in_pod
+
+Execute commands inside pod containers.
+
+**Parameters:**
+- `name` (required): Pod name
+- `namespace` (required): Namespace
+- `command` (required): Command to execute as list
+- `container` (optional): Container name
+
+<CodeGroup>
+
+```python Config Check
+# Check nginx config
+exec_in_pod(
+    name="nginx-pod",
+    namespace="default",
+    command=["nginx", "-t"]
+)
+```
+
+```python File Listing
+# List files
+exec_in_pod(
+    name="my-app",
+    namespace="default",
+    command=["ls", "-la", "/app"]
+)
+```
+
+```python Debug Command
+# Check environment variables
+exec_in_pod(
+    name="backend-pod",
+    namespace="production",
+    command=["env"]
+)
+```
+
+</CodeGroup>
+
+### Event and Discovery
+
+#### get_resource_events
+
+Get Kubernetes events related to a resource.
+
+**Parameters:**
+- `resource_type` (required): Type of resource
+- `name` (required): Resource name
+- `namespace` (optional): Namespace
+- `limit` (optional): Maximum events to return (default: 10)
+
+```python
+# Get pod events
+get_resource_events(
+    resource_type="pod",
+    name="crashloop-pod",
+    namespace="default"
+)
+```
+
+#### get_resource_types
+
+Get all available resource types in the cluster.
+
+**Parameters:**
+- `random_string` (required): Any string (required by MCP protocol)
+
+```python
+# List all available resource types
+get_resource_types(random_string="x")
+```
+
+## AI Assistant Integration
+
+### Cursor Integration
+
+Add to your Cursor settings (`~/.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "openshift-python-wrapper": {
+      "command": "openshift-mcp-server"
+    }
+  }
+}
+```
+
+Then use in Cursor with `@openshift-python-wrapper`.
+
+### Claude Desktop Integration
+
+Add to Claude Desktop config:
+
+<Tabs>
+
+<Tab title="Basic Configuration">
+```json
+{
+  "mcpServers": {
+    "openshift-python-wrapper": {
+      "command": "openshift-mcp-server"
+    }
+  }
+}
+```
+</Tab>
+
+<Tab title="Custom Kubeconfig">
+```json
+{
+  "mcpServers": {
+    "openshift-python-wrapper": {
+      "command": "openshift-mcp-server",
+      "env": {
+        "KUBECONFIG": "/home/user/.kube/config"
+      }
+    }
+  }
+}
+```
+</Tab>
+
+</Tabs>
+
+## Common Use Cases
+
+### Troubleshooting a Failing Pod
+
+<Steps>
+
+<Step title="Check pod status">
+```python
+pod = get_resource("pod", "failing-app", "production")
+```
+</Step>
+
+<Step title="Get recent events">
+```python
+events = get_resource_events("pod", "failing-app", "production")
+```
+</Step>
+
+<Step title="Check logs">
+```python
+logs = get_pod_logs("failing-app", "production", tail_lines=200)
+```
+</Step>
+
+<Step title="Execute diagnostic command">
+```python
+exec_in_pod(
+    "failing-app",
+    "production",
+    ["cat", "/etc/app/config.yaml"]
+)
+```
+</Step>
+
+</Steps>
+
+### Deploying a Complete Application
+
+```python
+# Apply all resources at once
+yaml = """
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: my-app
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: my-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: api
+        image: myapp/backend:v1.0
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: my-app
+spec:
+  selector:
+    app: backend
+  ports:
+  - port: 80
+    targetPort: 8080
+"""
+apply_yaml(yaml)
+```
+
+### Checking Cluster Health
+
+<Steps>
+
+<Step title="List nodes">
+```python
+nodes = list_resources("node")
+```
+</Step>
+
+<Step title="Check for pod issues">
+```python
+problem_pods = list_resources(
+    "pod",
+    field_selector="status.phase!=Running,status.phase!=Succeeded"
+)
+```
+</Step>
+
+<Step title="Review recent events">
+```python
+events = list_resources("event", limit=50)
+```
+</Step>
+
+</Steps>
+
+### Managing OpenShift Virtualization
+
+```python
+# Check CNV version
+csv = list_resources(
+    "clusterserviceversion",
+    namespace="openshift-cnv"
+)
+
+# List VMs
+vms = list_resources(
+    "virtualmachine",
+    namespace="my-vms"
+)
+
+# Check VM status
+vm = get_resource(
+    "virtualmachine",
+    "rhel9-vm",
+    "my-vms"
+)
+```
+
+## Supported Resource Types
+
+The server dynamically discovers all available resource types from your cluster.
+
+<AccordionGroup>
+
+<Accordion title="Core Kubernetes Resources">
+- `pod`, `service`, `deployment`, `replicaset`, `daemonset`
+- `configmap`, `secret`, `persistentvolume`, `persistentvolumeclaim`
+- `namespace`, `node`, `event`, `endpoint`
+- `serviceaccount`, `role`, `rolebinding`, `clusterrole`, `clusterrolebinding`
+</Accordion>
+
+<Accordion title="OpenShift Specific">
+- `route`, `project`, `imagestream`, `buildconfig`, `deploymentconfig`
+- `user`, `group`, `oauth`, `securitycontextconstraints`
+</Accordion>
+
+<Accordion title="OpenShift Virtualization">
+- `virtualmachine`, `virtualmachineinstance`, `datavolume`
+- `hyperconverged`, `kubevirt`, `cdi`
+</Accordion>
+
+<Accordion title="Operators">
+- `clusterserviceversion`, `subscription`, `installplan`, `operatorgroup`
+- `catalogsource`, `packagemanifest`
+</Accordion>
+
+</AccordionGroup>
+
+## Security Best Practices
+
+<CardGroup cols={2}>
+
+<Card title="RBAC" icon="shield">
+Ensure your kubeconfig has appropriate permissions for operations
+</Card>
+
+<Card title="Namespaces" icon="folder">
+Use namespace isolation for multi-tenant environments
+</Card>
+
+<Card title="Resource Limits" icon="gauge">
+Set appropriate limits when listing resources to avoid overload
+</Card>
+
+<Card title="Sensitive Data" icon="lock">
+Be careful with secrets and configmaps containing sensitive information
+</Card>
+
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+
+<Accordion title="Connection Issues">
+Test cluster connectivity:
+```bash
+kubectl cluster-info
+echo $KUBECONFIG
+kubectl config current-context
+```
+</Accordion>
+
+<Accordion title="Permission Errors">
+Check your permissions:
+```bash
+kubectl auth can-i --list
+```
+</Accordion>
+
+<Accordion title="MCP Server Issues">
+Run in debug mode:
+```bash
+SIMPLE_LOGGER_LEVEL=DEBUG python mcp_server/server.py
+tail -f /tmp/mcp_server_debug.log
+```
+</Accordion>
+
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="API Reference" href="../api-reference/introduction" icon="book">
+Explore the complete API documentation
+</Card>
+
+<Card title="Examples" href="../examples/basic-usage" icon="code">
+Check out practical examples and tutorials
+</Card>
+
+</CardGroup>

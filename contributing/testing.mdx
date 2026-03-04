@@ -1,0 +1,464 @@
+---
+title: Testing
+description: Guide to writing and running tests for OpenShift Python Wrapper
+---
+
+OpenShift Python Wrapper uses pytest for testing with a comprehensive fake Kubernetes client that allows testing without a real cluster.
+
+## Test Framework Overview
+
+The project uses:
+- **pytest**: Test framework
+- **Fake Kubernetes Client**: In-memory Kubernetes API simulation
+- **Coverage**: Code coverage reporting (minimum 65%)
+- **Incremental tests**: Tests that depend on previous test results
+
+## Running Tests
+
+### Run All Tests
+
+```bash
+uv run --group tests pytest
+```
+
+### Run Specific Test File
+
+```bash
+uv run --group tests pytest tests/test_resources/test_pod.py
+```
+
+### Run Tests by Pattern
+
+```bash
+# Run all resource tests
+uv run --group tests pytest tests/test_resources/
+
+# Run tests matching a pattern
+uv run --group tests pytest -k "test_create"
+```
+
+### Run with Coverage
+
+```bash
+uv run --group tests pytest --cov=ocp_resources
+```
+
+Coverage reports are generated in:
+- `.tests_coverage/` (HTML format)
+- Terminal output
+
+### Run Specific Test Class or Method
+
+```bash
+# Run a specific test class
+uv run --group tests pytest tests/test_resource.py::TestResource
+
+# Run a specific test method
+uv run --group tests pytest tests/test_resource.py::TestResource::test_create
+```
+
+## Test Structure
+
+### Basic Test Pattern
+
+Tests use the fake client fixture provided in `conftest.py`:
+
+```python
+import pytest
+from ocp_resources.config_map import ConfigMap
+
+
+@pytest.mark.incremental
+class TestConfigMap:
+    @pytest.fixture(scope="class")
+    def config_map(self, fake_client):
+        return ConfigMap(
+            client=fake_client,
+            name="test-configmap",
+            namespace="default",
+            data={"key": "value"},
+        )
+
+    def test_01_create_config_map(self, config_map):
+        """Test creating ConfigMap"""
+        deployed_resource = config_map.deploy()
+        assert deployed_resource
+        assert deployed_resource.name == "test-configmap"
+        assert config_map.exists
+
+    def test_02_get_config_map(self, config_map):
+        """Test getting ConfigMap"""
+        assert config_map.instance
+        assert config_map.kind == "ConfigMap"
+
+    def test_03_update_config_map(self, config_map):
+        """Test updating ConfigMap"""
+        resource_dict = config_map.instance.to_dict()
+        resource_dict["data"]["new_key"] = "new_value"
+        config_map.update(resource_dict=resource_dict)
+        assert config_map.instance.data["new_key"] == "new_value"
+
+    def test_04_delete_config_map(self, config_map):
+        """Test deleting ConfigMap"""
+        config_map.clean_up(wait=False)
+        assert not config_map.exists
+```
+
+### Incremental Tests
+
+Tests marked with `@pytest.mark.incremental` will stop if a test fails:
+
+```python
+@pytest.mark.incremental
+class TestResource:
+    def test_01_create(self, resource):
+        # If this fails, subsequent tests are skipped
+        resource.deploy()
+        assert resource.exists
+
+    def test_02_update(self, resource):
+        # Only runs if test_01_create passes
+        resource.update(...)
+```
+
+This is useful for CRUD tests where later tests depend on earlier ones.
+
+## Fake Kubernetes Client
+
+The fake client simulates Kubernetes API behavior without requiring a real cluster.
+
+### Using the Fake Client
+
+```python
+from ocp_resources.resource import get_client
+
+# Get a fake client
+fake_client = get_client(fake=True)
+
+# Use it like a real client
+from ocp_resources.pod import Pod
+
+pod = Pod(
+    client=fake_client,
+    name="test-pod",
+    namespace="default",
+    containers=[{"name": "nginx", "image": "nginx:latest"}],
+)
+pod.deploy()
+assert pod.exists
+```
+
+### Fake Client Features
+
+- In-memory resource storage
+- Simulates resource CRUD operations
+- Supports annotations for controlling behavior
+- No cluster connection required
+- Fast test execution
+
+### Controlling Resource State
+
+Use annotations to control resource behavior:
+
+```python
+pod = Pod(
+    client=fake_client,
+    name="test-pod",
+    namespace="default",
+    containers=[{"name": "nginx", "image": "nginx:latest"}],
+    annotations={
+        "fake-client.io/ready": "false",  # Set Ready status to False
+    },
+)
+```
+
+## Generating Tests
+
+### Automated Test Generation
+
+Generate tests for newly added resources using the test generator:
+
+```bash
+# Generate tests for a specific resource
+uv run tests/scripts/generate_pytest_test.py --kind ResourceName
+
+# Generate tests for multiple resources
+uv run tests/scripts/generate_pytest_test.py --kind Pod,Service,Deployment
+
+# Preview without writing files
+uv run tests/scripts/generate_pytest_test.py --kind ResourceName --dry-run
+```
+
+### Using Class Generator
+
+The class generator can also add tests:
+
+```bash
+class-generator --kind Pod --add-tests
+```
+
+<Note>
+Tests are only generated for classes that were generated by the class-generator.
+</Note>
+
+### Generated Test Location
+
+Tests are created in `tests/test_resources/` with the naming pattern:
+- `Pod` → `test_pod.py`
+- `ConfigMap` → `test_config_map.py`
+- `VirtualMachine` → `test_virtual_machine.py`
+
+## Test Fixtures
+
+### Common Fixtures
+
+Defined in `tests/conftest.py`:
+
+```python
+@pytest.fixture(scope="class")
+def fake_client():
+    """Fixture that provides a fake client for testing"""
+    return get_client(fake=True)
+```
+
+### Custom Fixtures
+
+Create resource-specific fixtures:
+
+```python
+@pytest.fixture(scope="class")
+def namespace(fake_client):
+    return Namespace(client=fake_client, name="test-namespace")
+
+@pytest.fixture(scope="class")
+def pod(fake_client, namespace):
+    return Pod(
+        client=fake_client,
+        name="test-pod",
+        namespace=namespace.name,
+        containers=[{"name": "nginx", "image": "nginx:latest"}],
+    )
+```
+
+### Fixture Scopes
+
+- `scope="function"`: New fixture instance for each test (default)
+- `scope="class"`: One instance shared across test class
+- `scope="module"`: One instance shared across test file
+- `scope="session"`: One instance for entire test session
+
+## Testing Patterns
+
+### Testing Resource Creation
+
+```python
+def test_create_resource(self, resource):
+    """Test creating a resource"""
+    deployed = resource.deploy()
+    assert deployed
+    assert deployed.name == "expected-name"
+    assert resource.exists
+    assert resource.instance
+```
+
+### Testing Resource Retrieval
+
+```python
+def test_get_resource(self, fake_client):
+    """Test getting resources"""
+    resources = list(Pod.get(client=fake_client))
+    assert len(resources) > 0
+    assert all(isinstance(r, Pod) for r in resources)
+```
+
+### Testing Resource Updates
+
+```python
+def test_update_resource(self, resource):
+    """Test updating a resource"""
+    resource_dict = resource.instance.to_dict()
+    resource_dict["metadata"]["labels"] = {"updated": "true"}
+    resource.update(resource_dict=resource_dict)
+    assert resource.labels["updated"] == "true"
+```
+
+### Testing Resource Deletion
+
+```python
+def test_delete_resource(self, resource):
+    """Test deleting a resource"""
+    resource.clean_up(wait=False)
+    assert not resource.exists
+```
+
+### Testing Resource Conditions
+
+```python
+def test_wait_for_condition(self, pod):
+    """Test waiting for pod condition"""
+    pod.wait_for_condition(
+        condition=pod.Condition.READY,
+        status=pod.Condition.Status.TRUE,
+        timeout=30,
+    )
+```
+
+### Testing Resource Events
+
+```python
+def test_events(self, pod):
+    """Test getting resource events"""
+    events = list(pod.events(timeout=5))
+    assert events
+    assert all(hasattr(e, "message") for e in events)
+```
+
+## Coverage Requirements
+
+### Minimum Coverage
+
+The project requires minimum 65% code coverage:
+
+```toml pyproject.toml
+[tool.coverage.report]
+fail_under = 65
+```
+
+### Excluded from Coverage
+
+```toml pyproject.toml
+[tool.coverage.run]
+omit = [
+  "tests/*",
+  "class_generator/tests/*",
+  "class_generator/scripts/tests/*",
+  "mcp_server/tests/*",
+  "fake_kubernetes_client/tests/*",
+]
+```
+
+## Test Markers
+
+### Available Markers
+
+```toml pyproject.toml
+[tool.pytest.ini_options]
+markers = [
+  "incremental: Mark tests as incremental",
+  "kubevirt: Mark tests as kubevirt tests",
+]
+```
+
+### Using Markers
+
+```python
+@pytest.mark.incremental
+class TestIncrementalFlow:
+    # Tests run sequentially and stop on first failure
+    pass
+
+@pytest.mark.kubevirt
+class TestKubeVirtResource:
+    # Tests specific to KubeVirt
+    pass
+```
+
+### Running Marked Tests
+
+```bash
+# Run only incremental tests
+uv run --group tests pytest -m incremental
+
+# Run only kubevirt tests
+uv run --group tests pytest -m kubevirt
+
+# Exclude specific markers
+uv run --group tests pytest -m "not kubevirt"
+```
+
+## Debugging Tests
+
+### Verbose Output
+
+```bash
+uv run --group tests pytest -v
+```
+
+### Show Print Statements
+
+```bash
+uv run --group tests pytest -s
+```
+
+### Drop into Debugger on Failure
+
+```bash
+uv run --group tests pytest --pdb
+```
+
+### Run Failed Tests
+
+```bash
+# Rerun only tests that failed last time
+uv run --group tests pytest --lf
+
+# Run failed tests first, then others
+uv run --group tests pytest --ff
+```
+
+## Best Practices
+
+1. **Use incremental tests** for CRUD operations
+2. **Use descriptive test names** that explain what's being tested
+3. **Test one thing per test** - keep tests focused
+4. **Use the fake client** for unit tests
+5. **Clean up resources** after tests (use `clean_up()` or context managers)
+6. **Add docstrings** to test methods
+7. **Number incremental tests** (test_01, test_02, etc.) for clarity
+8. **Use fixtures** to share setup code
+9. **Test edge cases** and error conditions
+10. **Maintain coverage** above 65%
+
+## CI/CD Integration
+
+Tests run automatically in CI/CD pipelines:
+
+- On every pull request
+- Before merging to main
+- Coverage reports are generated
+- All checks must pass before merge
+
+## Troubleshooting
+
+### Tests Not Found
+
+Ensure test files:
+- Start with `test_`
+- Are in a directory with `__init__.py`
+- Contain classes starting with `Test`
+- Contain methods starting with `test_`
+
+### Import Errors
+
+Make sure you're running tests with the correct command:
+
+```bash
+# Correct
+uv run --group tests pytest
+
+# Not recommended
+pytest  # May not have correct dependencies
+```
+
+### Fixture Not Found
+
+Check that:
+- `conftest.py` is in the test directory or parent
+- Fixture is defined with `@pytest.fixture`
+- Fixture name matches parameter name
+
+## Additional Resources
+
+- [pytest documentation](https://docs.pytest.org/)
+- [Fake Kubernetes Client README](https://github.com/RedHatQE/openshift-python-wrapper/blob/main/fake_kubernetes_client/README.md)
+- [Test examples](https://github.com/RedHatQE/openshift-python-wrapper/tree/main/tests)

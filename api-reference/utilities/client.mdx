@@ -1,0 +1,345 @@
+---
+title: Client
+description: Kubernetes client creation and configuration utilities
+---
+
+## Overview
+
+The client module provides utilities for creating and configuring Kubernetes clients, including support for both real and fake clients for testing purposes.
+
+## get_client
+
+Get a configured Kubernetes DynamicClient instance.
+
+This function creates a Kubernetes client from various configuration sources including kubeconfig files, configuration dictionaries, or environment variables. It supports multiple authentication methods and can return a fake client for testing.
+
+```python
+from ocp_resources.resource import get_client
+
+# Create client from default kubeconfig
+client = get_client()
+
+# Create client from specific kubeconfig file
+client = get_client(config_file="/path/to/kubeconfig")
+
+# Create client with basic auth
+client = get_client(
+    username="admin",
+    password="secret",
+    host="https://api.cluster.example.com:6443"
+)
+
+# Create fake client for testing
+fake_client = get_client(fake=True)
+```
+
+### Parameters
+
+<ParamField path="config_file" type="str | None" default="None">
+  Path to a kubeconfig file. If not provided, will use `KUBECONFIG` environment variable or `~/.kube/config`.
+</ParamField>
+
+<ParamField path="config_dict" type="dict[str, Any] | None" default="None">
+  Dictionary containing kubeconfig configuration. Mutually exclusive with `config_file`.
+</ParamField>
+
+<ParamField path="context" type="str | None" default="None">
+  Name of the context to use from the kubeconfig.
+</ParamField>
+
+<ParamField path="client_configuration" type="kubernetes.client.Configuration | None" default="None">
+  Pre-configured Kubernetes client configuration object.
+</ParamField>
+
+<ParamField path="persist_config" type="bool" default="True">
+  Whether to persist the configuration file when using `config_dict`.
+</ParamField>
+
+<ParamField path="temp_file_path" type="str | None" default="None">
+  Path to a temporary kubeconfig file when using `config_dict`.
+</ParamField>
+
+<ParamField path="try_refresh_token" type="bool" default="True">
+  Whether to attempt token refresh for in-cluster configuration.
+</ParamField>
+
+<ParamField path="username" type="str | None" default="None">
+  Username for basic authentication. Must be used with `password` and `host`.
+</ParamField>
+
+<ParamField path="password" type="str | None" default="None">
+  Password for basic authentication. Must be used with `username` and `host`.
+</ParamField>
+
+<ParamField path="host" type="str | None" default="None">
+  Cluster API server host URL (e.g., "https://api.cluster.example.com:6443").
+</ParamField>
+
+<ParamField path="verify_ssl" type="bool | None" default="None">
+  Whether to verify SSL certificates when connecting to the cluster.
+</ParamField>
+
+<ParamField path="token" type="str | None" default="None">
+  Bearer token for authentication. Must be used with `host`.
+</ParamField>
+
+<ParamField path="fake" type="bool" default="False">
+  If True, returns a FakeDynamicClient for testing instead of a real client.
+</ParamField>
+
+### Returns
+
+<ResponseField name="client" type="DynamicClient | FakeDynamicClient">
+  A configured Kubernetes DynamicClient instance (or FakeDynamicClient if `fake=True`).
+</ResponseField>
+
+### Behavior
+
+The function attempts to create a client in the following order:
+
+1. **Basic Auth**: If `username`, `password`, and `host` are provided
+2. **Token Auth**: If `host` and `token` are provided
+3. **Config Dict**: If `config_dict` is provided
+4. **Config File**: Uses `config_file` parameter, `KUBECONFIG` env var, or `~/.kube/config`
+5. **In-Cluster**: Falls back to in-cluster configuration if other methods fail
+
+The function automatically detects and uses proxy settings from `HTTPS_PROXY` or `HTTP_PROXY` environment variables.
+
+### Examples
+
+#### Creating a Client with Token Authentication
+
+```python
+from ocp_resources.resource import get_client
+
+client = get_client(
+    host="https://api.cluster.example.com:6443",
+    token="eyJhbGciOiJSUzI1NiIsImtpZCI6...",
+    verify_ssl=False
+)
+```
+
+#### Using a Specific Kubeconfig Context
+
+```python
+from ocp_resources.resource import get_client
+
+client = get_client(
+    config_file="/path/to/kubeconfig",
+    context="production-cluster"
+)
+```
+
+#### Creating a Client from Configuration Dictionary
+
+```python
+from ocp_resources.resource import get_client
+
+config = {
+    "clusters": [{
+        "name": "my-cluster",
+        "cluster": {
+            "server": "https://api.cluster.example.com:6443",
+            "certificate-authority-data": "LS0tLS1CRUdJTi..."
+        }
+    }],
+    "users": [{
+        "name": "admin",
+        "user": {
+            "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6..."
+        }
+    }],
+    "contexts": [{
+        "name": "my-context",
+        "context": {
+            "cluster": "my-cluster",
+            "user": "admin"
+        }
+    }],
+    "current-context": "my-context"
+}
+
+client = get_client(config_dict=config)
+```
+
+---
+
+## FakeDynamicClient
+
+A fake implementation of the Kubernetes DynamicClient for testing purposes.
+
+FakeDynamicClient provides an in-memory mock of the Kubernetes API that can be used in unit tests without requiring a real cluster connection. It implements the same interface as the real DynamicClient.
+
+```python
+from ocp_resources.resource import get_client
+from ocp_resources import Pod
+
+# Create a fake client
+client = get_client(fake=True)
+
+# Use it like a real client
+pod = Pod(
+    client=client,
+    name="test-pod",
+    namespace="default"
+)
+pod.deploy()
+
+assert pod.exists
+```
+
+### Key Features
+
+- **In-Memory Storage**: All resources are stored in memory, no actual cluster required
+- **Full CRUD Operations**: Supports create, read, update, and delete operations
+- **Custom Resource Support**: Can register custom resources dynamically
+- **Namespace Management**: Automatically handles namespace creation
+- **Compatible Interface**: Drop-in replacement for DynamicClient in tests
+
+### Methods
+
+#### resources
+
+Access the resource manager for getting resource APIs.
+
+```python
+client = get_client(fake=True)
+
+# Get a resource API
+pod_api = client.resources.get(api_version="v1", kind="Pod")
+```
+
+#### register_resources
+
+Register custom resource definitions for testing.
+
+```python
+client = get_client(fake=True)
+
+# Register a single custom resource
+client.register_resources({
+    "kind": "MyCustomResource",
+    "api_version": "v1alpha1",
+    "group": "example.com",
+    "namespaced": True
+})
+
+# Register multiple resources
+client.register_resources([
+    {
+        "kind": "MyApp",
+        "api_version": "v1",
+        "group": "apps.example.com",
+        "namespaced": True,
+        "plural": "myapps"
+    },
+    {
+        "kind": "MyConfig",
+        "api_version": "v1beta1",
+        "group": "config.example.com",
+        "namespaced": False
+    }
+])
+```
+
+<ParamField path="resources" type="dict[str, Any] | list[dict[str, Any]]">
+  Either a single resource definition or a list of resource definitions. Each definition should contain:
+  - `kind`: Resource kind (required)
+  - `api_version`: API version without group (required)
+  - `group`: API group (optional, empty string for core resources)
+  - `namespaced`: Whether resource is namespaced (optional, defaults to True)
+  - `plural`: Plural name (optional, auto-generated if not provided)
+  - `singular`: Singular name (optional, defaults to lowercase kind)
+</ParamField>
+
+#### ensure_namespace
+
+Ensure a namespace exists, creating it if necessary.
+
+```python
+client = get_client(fake=True)
+client.ensure_namespace("test-namespace")
+```
+
+#### version
+
+Get the fake server version information.
+
+```python
+client = get_client(fake=True)
+version_info = client.version()
+# Returns: {'major': '1', 'minor': '29', 'gitVersion': 'v1.29.0', ...}
+```
+
+### Testing Example
+
+```python
+import pytest
+from ocp_resources.resource import get_client
+from ocp_resources import Namespace, Pod
+
+@pytest.fixture
+def fake_k8s_client():
+    """Provide a fake Kubernetes client for testing."""
+    return get_client(fake=True)
+
+def test_pod_creation(fake_k8s_client):
+    """Test pod creation with fake client."""
+    # Create namespace
+    namespace = Namespace(
+        client=fake_k8s_client,
+        name="test-ns"
+    )
+    namespace.deploy()
+    
+    # Create pod
+    pod = Pod(
+        client=fake_k8s_client,
+        name="test-pod",
+        namespace="test-ns"
+    )
+    pod.deploy()
+    
+    # Verify pod exists
+    assert pod.exists
+    assert pod.name == "test-pod"
+    assert pod.namespace == "test-ns"
+    
+    # Clean up
+    pod.delete()
+    assert not pod.exists
+
+def test_custom_resource(fake_k8s_client):
+    """Test custom resource with fake client."""
+    # Register custom resource
+    fake_k8s_client.register_resources({
+        "kind": "MyApp",
+        "api_version": "v1",
+        "group": "example.com",
+        "namespaced": True
+    })
+    
+    # Get custom resource API
+    myapp_api = fake_k8s_client.resources.get(
+        api_version="example.com/v1",
+        kind="MyApp"
+    )
+    
+    # Create custom resource instance
+    myapp = myapp_api.create(
+        body={
+            "metadata": {"name": "my-app", "namespace": "default"},
+            "spec": {"replicas": 3}
+        },
+        namespace="default"
+    )
+    
+    assert myapp.metadata.name == "my-app"
+```
+
+### Limitations
+
+- **No Validation**: Schema validation is not enforced
+- **Simplified Watch**: Watch operations are limited
+- **No Side Effects**: Controllers and operators are not simulated
+- **In-Memory Only**: Data is lost when the client is destroyed

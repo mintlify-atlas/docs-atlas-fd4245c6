@@ -1,0 +1,398 @@
+---
+title: Constants
+description: Common constants and exception dictionaries for OpenShift Python Wrapper
+---
+
+## Overview
+
+The constants module provides commonly used timeout values and exception dictionaries for handling transient cluster errors during API operations.
+
+---
+
+## Timeout Constants
+
+Predefined timeout values in seconds for various operations.
+
+### TIMEOUT_1SEC
+
+```python
+from ocp_resources.utils.constants import TIMEOUT_1SEC
+
+TIMEOUT_1SEC = 1
+```
+
+One second timeout for quick operations.
+
+**Usage:**
+```python
+from ocp_resources.utils.constants import TIMEOUT_1SEC
+
+resource.wait_for_condition(
+    condition="Ready",
+    status="True",
+    sleep_time=TIMEOUT_1SEC
+)
+```
+
+---
+
+### TIMEOUT_5SEC
+
+```python
+from ocp_resources.utils.constants import TIMEOUT_5SEC
+
+TIMEOUT_5SEC = 5
+```
+
+Five second timeout for short operations.
+
+---
+
+### TIMEOUT_10SEC
+
+```python
+from ocp_resources.utils.constants import TIMEOUT_10SEC
+
+TIMEOUT_10SEC = 10
+```
+
+Ten second timeout for brief operations. This is the default timeout for cluster retry operations.
+
+**Usage:**
+```python
+from ocp_resources.utils.constants import TIMEOUT_10SEC
+from ocp_resources import Resource
+
+result = Resource.retry_cluster_exceptions(
+    func=api_call,
+    timeout=TIMEOUT_10SEC
+)
+```
+
+---
+
+### TIMEOUT_30SEC
+
+```python
+from ocp_resources.utils.constants import TIMEOUT_30SEC
+
+TIMEOUT_30SEC = 30
+```
+
+Thirty second timeout for moderate operations.
+
+---
+
+### TIMEOUT_1MINUTE
+
+```python
+from ocp_resources.utils.constants import TIMEOUT_1MINUTE
+
+TIMEOUT_1MINUTE = 60
+```
+
+One minute (60 seconds) timeout. This is the default timeout for most resource operations.
+
+**Usage:**
+```python
+from ocp_resources.utils.constants import TIMEOUT_1MINUTE
+
+class MyResource(Resource):
+    timeout_seconds = TIMEOUT_1MINUTE
+```
+
+---
+
+### TIMEOUT_2MINUTES
+
+```python
+from ocp_resources.utils.constants import TIMEOUT_2MINUTES
+
+TIMEOUT_2MINUTES = 120
+```
+
+Two minute (120 seconds) timeout for longer operations.
+
+---
+
+### TIMEOUT_4MINUTES
+
+```python
+from ocp_resources.utils.constants import TIMEOUT_4MINUTES
+
+TIMEOUT_4MINUTES = 240
+```
+
+Four minute (240 seconds) timeout. This is the default timeout for resource deletion and waiting operations.
+
+**Usage:**
+```python
+from ocp_resources.utils.constants import TIMEOUT_4MINUTES
+from ocp_resources import Pod
+
+pod = Pod(client=client, name="my-pod", namespace="default")
+pod.delete(wait=True, timeout=TIMEOUT_4MINUTES)
+```
+
+---
+
+### TIMEOUT_10MINUTES
+
+```python
+from ocp_resources.utils.constants import TIMEOUT_10MINUTES
+
+TIMEOUT_10MINUTES = 600
+```
+
+Ten minute (600 seconds) timeout for extended operations.
+
+**Usage:**
+```python
+from ocp_resources.utils.constants import TIMEOUT_10MINUTES
+from ocp_resources import Deployment
+
+deployment = Deployment(
+    client=client,
+    name="my-app",
+    namespace="default"
+)
+deployment.wait_for_condition(
+    condition="Available",
+    status="True",
+    timeout=TIMEOUT_10MINUTES
+)
+```
+
+---
+
+## Exception Dictionaries
+
+Dictionaries mapping exception types to lists of error message patterns. These are used with `TimeoutSampler` to automatically retry operations on transient cluster errors.
+
+### DEFAULT_CLUSTER_RETRY_EXCEPTIONS
+
+Default exceptions that should trigger automatic retries during cluster operations.
+
+```python
+from ocp_resources.utils.constants import DEFAULT_CLUSTER_RETRY_EXCEPTIONS
+
+DEFAULT_CLUSTER_RETRY_EXCEPTIONS = {
+    MaxRetryError: [],
+    ConnectionAbortedError: [],
+    ConnectionResetError: [],
+    InternalServerError: [
+        "etcdserver: leader changed",
+        "etcdserver: request timed out",
+        "Internal error occurred: failed calling webhook",
+        "rpc error:",
+    ],
+    ServerTimeoutError: [],
+    ForbiddenError: ["context deadline exceeded"],
+}
+```
+
+#### Exception Types
+
+<ParamField path="MaxRetryError" type="list[str]">
+  Network-level retry errors. Empty list means retry on any MaxRetryError.
+</ParamField>
+
+<ParamField path="ConnectionAbortedError" type="list[str]">
+  Connection aborted errors. Empty list means retry on any ConnectionAbortedError.
+</ParamField>
+
+<ParamField path="ConnectionResetError" type="list[str]">
+  Connection reset errors. Empty list means retry on any ConnectionResetError.
+</ParamField>
+
+<ParamField path="InternalServerError" type="list[str]">
+  Kubernetes API server internal errors. Retries only on specific error messages:
+  - etcd leader changes
+  - etcd timeouts
+  - Webhook failures
+  - RPC errors
+</ParamField>
+
+<ParamField path="ServerTimeoutError" type="list[str]">
+  API server timeout errors. Empty list means retry on any ServerTimeoutError.
+</ParamField>
+
+<ParamField path="ForbiddenError" type="list[str]">
+  Forbidden errors caused by timeouts. Retries only on "context deadline exceeded".
+</ParamField>
+
+#### Usage Example
+
+```python
+from ocp_resources.utils.constants import DEFAULT_CLUSTER_RETRY_EXCEPTIONS
+from ocp_resources import Resource
+from timeout_sampler import TimeoutSampler
+
+# Automatically retry on cluster errors
+sampler = TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=some_api_call,
+    exceptions_dict=DEFAULT_CLUSTER_RETRY_EXCEPTIONS
+)
+
+for sample in sampler:
+    if sample:
+        break
+```
+
+---
+
+### PROTOCOL_ERROR_EXCEPTION_DICT
+
+Exception dictionary for handling protocol-level errors.
+
+```python
+from ocp_resources.utils.constants import PROTOCOL_ERROR_EXCEPTION_DICT
+
+PROTOCOL_ERROR_EXCEPTION_DICT = {
+    ProtocolError: []
+}
+```
+
+**Usage:**
+```python
+from ocp_resources.utils.constants import PROTOCOL_ERROR_EXCEPTION_DICT
+
+resource.wait_for_status(
+    status="Running",
+    timeout=300,
+    exceptions_dict=PROTOCOL_ERROR_EXCEPTION_DICT
+)
+```
+
+---
+
+### NOT_FOUND_ERROR_EXCEPTION_DICT
+
+Exception dictionary for handling resource not found errors.
+
+```python
+from ocp_resources.utils.constants import NOT_FOUND_ERROR_EXCEPTION_DICT
+
+NOT_FOUND_ERROR_EXCEPTION_DICT = {
+    NotFoundError: []
+}
+```
+
+**Usage:**
+```python
+from ocp_resources.utils.constants import NOT_FOUND_ERROR_EXCEPTION_DICT
+from timeout_sampler import TimeoutSampler
+
+# Wait for resource to exist, ignoring NotFoundError
+sampler = TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=lambda: resource.exists,
+    exceptions_dict=NOT_FOUND_ERROR_EXCEPTION_DICT
+)
+
+for sample in sampler:
+    if sample:
+        break
+```
+
+---
+
+## Complete Example
+
+Here's a comprehensive example using multiple constants:
+
+```python
+from ocp_resources import Pod
+from ocp_resources.resource import get_client
+from ocp_resources.utils.constants import (
+    DEFAULT_CLUSTER_RETRY_EXCEPTIONS,
+    NOT_FOUND_ERROR_EXCEPTION_DICT,
+    PROTOCOL_ERROR_EXCEPTION_DICT,
+    TIMEOUT_1MINUTE,
+    TIMEOUT_4MINUTES,
+    TIMEOUT_10MINUTES,
+)
+from timeout_sampler import TimeoutSampler
+
+# Create client
+client = get_client()
+
+# Create pod with custom timeout
+pod = Pod(
+    client=client,
+    name="my-pod",
+    namespace="default"
+)
+pod.timeout_seconds = TIMEOUT_1MINUTE
+
+# Create with retry logic
+pod.create(wait=True)
+
+# Wait for pod with combined exception handling
+exceptions_dict = {
+    **PROTOCOL_ERROR_EXCEPTION_DICT,
+    **NOT_FOUND_ERROR_EXCEPTION_DICT,
+    **DEFAULT_CLUSTER_RETRY_EXCEPTIONS,
+}
+
+sampler = TimeoutSampler(
+    wait_timeout=TIMEOUT_10MINUTES,
+    sleep=5,
+    func=lambda: pod.instance.status.phase == "Running",
+    exceptions_dict=exceptions_dict
+)
+
+for sample in sampler:
+    if sample:
+        print("Pod is running!")
+        break
+
+# Delete with timeout
+pod.delete(wait=True, timeout=TIMEOUT_4MINUTES)
+```
+
+## Exception Dictionary Merging
+
+You can combine multiple exception dictionaries for comprehensive error handling:
+
+```python
+from ocp_resources.utils.constants import (
+    DEFAULT_CLUSTER_RETRY_EXCEPTIONS,
+    NOT_FOUND_ERROR_EXCEPTION_DICT,
+    PROTOCOL_ERROR_EXCEPTION_DICT,
+)
+
+# Merge dictionaries for comprehensive retry logic
+all_exceptions = {
+    **PROTOCOL_ERROR_EXCEPTION_DICT,
+    **NOT_FOUND_ERROR_EXCEPTION_DICT,
+    **DEFAULT_CLUSTER_RETRY_EXCEPTIONS,
+}
+
+resource.wait(
+    timeout=300,
+    sleep=1,
+    exceptions_dict=all_exceptions
+)
+```
+
+## Custom Exception Patterns
+
+You can extend exception dictionaries with your own patterns:
+
+```python
+from ocp_resources.utils.constants import DEFAULT_CLUSTER_RETRY_EXCEPTIONS
+from kubernetes.dynamic.exceptions import InternalServerError
+
+# Add custom error patterns
+custom_exceptions = DEFAULT_CLUSTER_RETRY_EXCEPTIONS.copy()
+custom_exceptions[InternalServerError].append("custom error pattern")
+
+resource.create(
+    wait=True,
+    exceptions_dict=custom_exceptions
+)
+```

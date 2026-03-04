@@ -1,0 +1,394 @@
+---
+title: 'BuildConfig'
+description: 'OpenShift BuildConfig resource for defining build strategies'
+---
+
+## Overview
+
+The `BuildConfig` class represents an OpenShift BuildConfig object, which defines a build strategy for creating container images. BuildConfigs are OpenShift-specific resources that automate the process of building container images from source code using various build strategies (Source-to-Image, Docker, Custom, or Pipeline).
+
+**API Group:** `build.openshift.io/v1`
+
+<Note>
+  BuildConfig is an OpenShift-specific resource. Ensure your cluster has OpenShift installed to use this resource.
+</Note>
+
+## Class Definition
+
+```python
+from ocp_resources.build_config import BuildConfig
+
+class BuildConfig(NamespacedResource):
+    api_group = NamespacedResource.ApiGroup.BUILD_OPENSHIFT_IO
+```
+
+## Constructor
+
+```python
+BuildConfig(
+    name=None,
+    namespace=None,
+    client=None,
+    source=None,
+    strategy=None,
+    output=None,
+    triggers=None,
+    teardown=True,
+    yaml_file=None,
+    delete_timeout=TIMEOUT_4MINUTES,
+    **kwargs
+)
+```
+
+### Parameters
+
+<ParamField path="name" type="str" default="None">
+  Name of the BuildConfig resource. If not provided, it must be specified in the YAML file.
+</ParamField>
+
+<ParamField path="namespace" type="str" default="None">
+  Namespace where the BuildConfig will be created. Required for namespaced resources.
+</ParamField>
+
+<ParamField path="client" type="DynamicClient" default="None">
+  Kubernetes dynamic client for API communication. If not provided, the default client will be used.
+</ParamField>
+
+<ParamField path="source" type="dict[str, Any]" default="None">
+  Source definition for the build. Specifies where the build input comes from (Git repository, binary, Dockerfile, etc.).
+  
+  Example:
+  ```python
+  {
+      "type": "Git",
+      "git": {
+          "uri": "https://github.com/example/app.git",
+          "ref": "main"
+      }
+  }
+  ```
+</ParamField>
+
+<ParamField path="strategy" type="dict[str, Any]" default="None">
+  Build strategy definition. Defines how the build is executed (Source, Docker, Custom, or JenkinsPipeline).
+  
+  Example for Source-to-Image:
+  ```python
+  {
+      "type": "Source",
+      "sourceStrategy": {
+          "from": {
+              "kind": "ImageStreamTag",
+              "name": "python:3.9"
+          }
+      }
+  }
+  ```
+</ParamField>
+
+<ParamField path="output" type="dict[str, Any]" default="None">
+  Output specification for the built image. Defines where the resulting image should be pushed.
+  
+  Example:
+  ```python
+  {
+      "to": {
+          "kind": "ImageStreamTag",
+          "name": "my-app:latest"
+      }
+  }
+  ```
+</ParamField>
+
+<ParamField path="triggers" type="list[dict[str, Any]]" default="None">
+  List of triggers that automatically start a new build. Common trigger types include ConfigChange, ImageChange, GitHub, and Generic webhooks.
+  
+  Example:
+  ```python
+  [
+      {"type": "ConfigChange"},
+      {"type": "ImageChange"}
+  ]
+  ```
+</ParamField>
+
+<ParamField path="teardown" type="bool" default="True">
+  If True, the resource will be automatically deleted when used as a context manager.
+</ParamField>
+
+<ParamField path="yaml_file" type="str" default="None">
+  Path to a YAML file containing the BuildConfig definition. If provided, the BuildConfig will be created from this file.
+</ParamField>
+
+<ParamField path="delete_timeout" type="int" default="TIMEOUT_4MINUTES">
+  Timeout in seconds for delete operations. Defaults to 4 minutes.
+</ParamField>
+
+<ParamField path="**kwargs" type="Any">
+  Additional keyword arguments passed to the parent `NamespacedResource` class. Common options include `label` and `annotations`.
+</ParamField>
+
+## Usage Examples
+
+### Source-to-Image Build
+
+Create a BuildConfig using Source-to-Image strategy:
+
+```python
+from ocp_resources.build_config import BuildConfig
+
+build_config = BuildConfig(
+    name="python-app-build",
+    namespace="default",
+    source={
+        "type": "Git",
+        "git": {
+            "uri": "https://github.com/openshift/django-ex.git",
+            "ref": "master"
+        }
+    },
+    strategy={
+        "type": "Source",
+        "sourceStrategy": {
+            "from": {
+                "kind": "ImageStreamTag",
+                "namespace": "openshift",
+                "name": "python:3.9-ubi8"
+            }
+        }
+    },
+    output={
+        "to": {
+            "kind": "ImageStreamTag",
+            "name": "python-app:latest"
+        }
+    },
+    triggers=[
+        {"type": "ConfigChange"},
+        {"type": "ImageChange"}
+    ]
+)
+build_config.deploy()
+```
+
+### Docker Build Strategy
+
+Create a BuildConfig using Docker build strategy:
+
+```python
+from ocp_resources.build_config import BuildConfig
+
+build_config = BuildConfig(
+    name="docker-build",
+    namespace="default",
+    source={
+        "type": "Git",
+        "git": {
+            "uri": "https://github.com/example/app.git"
+        },
+        "contextDir": "docker"
+    },
+    strategy={
+        "type": "Docker",
+        "dockerStrategy": {
+            "dockerfilePath": "Dockerfile"
+        }
+    },
+    output={
+        "to": {
+            "kind": "ImageStreamTag",
+            "name": "docker-app:latest"
+        }
+    }
+)
+build_config.deploy()
+```
+
+### Build with Environment Variables
+
+Create a BuildConfig with environment variables for the build:
+
+```python
+from ocp_resources.build_config import BuildConfig
+
+build_config = BuildConfig(
+    name="env-build",
+    namespace="default",
+    source={
+        "type": "Git",
+        "git": {
+            "uri": "https://github.com/example/app.git"
+        }
+    },
+    strategy={
+        "type": "Source",
+        "sourceStrategy": {
+            "from": {
+                "kind": "ImageStreamTag",
+                "name": "nodejs:16"
+            },
+            "env": [
+                {"name": "NPM_MIRROR", "value": "https://registry.npmjs.org/"},
+                {"name": "BUILD_LOGLEVEL", "value": "5"}
+            ]
+        }
+    },
+    output={
+        "to": {
+            "kind": "ImageStreamTag",
+            "name": "nodejs-app:latest"
+        }
+    }
+)
+build_config.deploy()
+```
+
+### Creating from YAML
+
+Create a BuildConfig from a YAML file:
+
+```python
+from ocp_resources.build_config import BuildConfig
+
+build_config = BuildConfig(
+    namespace="default",
+    yaml_file="buildconfig.yaml"
+)
+build_config.deploy()
+```
+
+### Using Context Manager
+
+Automatically clean up the BuildConfig after use:
+
+```python
+from ocp_resources.build_config import BuildConfig
+
+with BuildConfig(
+    name="temp-build",
+    namespace="default",
+    yaml_file="temp-buildconfig.yaml"
+) as bc:
+    # Trigger a build
+    bc.start_build()
+    # BuildConfig is automatically deleted when exiting
+```
+
+## Build Strategies
+
+### Source-to-Image (S2I)
+
+Builds container images from source code by injecting code into a base builder image:
+
+```python
+strategy={
+    "type": "Source",
+    "sourceStrategy": {
+        "from": {
+            "kind": "ImageStreamTag",
+            "name": "python:3.9"
+        },
+        "incremental": True,  # Enable incremental builds
+        "forcePull": False     # Use cached base image
+    }
+}
+```
+
+### Docker Strategy
+
+Builds container images using a Dockerfile:
+
+```python
+strategy={
+    "type": "Docker",
+    "dockerStrategy": {
+        "dockerfilePath": "Dockerfile",
+        "noCache": False,
+        "buildArgs": [
+            {"name": "HTTP_PROXY", "value": "http://proxy.example.com"}
+        ]
+    }
+}
+```
+
+### Custom Strategy
+
+Uses a custom builder image for specialized build processes:
+
+```python
+strategy={
+    "type": "Custom",
+    "customStrategy": {
+        "from": {
+            "kind": "ImageStreamTag",
+            "name": "custom-builder:latest"
+        },
+        "env": [
+            {"name": "CUSTOM_VAR", "value": "value"}
+        ]
+    }
+}
+```
+
+## Build Triggers
+
+BuildConfigs support various trigger types to automatically start builds:
+
+### Configuration Change Trigger
+
+Triggers a build when the BuildConfig is created or modified:
+
+```python
+triggers=[{"type": "ConfigChange"}]
+```
+
+### Image Change Trigger
+
+Triggers a build when a base image changes:
+
+```python
+triggers=[
+    {
+        "type": "ImageChange",
+        "imageChange": {
+            "from": {
+                "kind": "ImageStreamTag",
+                "name": "python:3.9"
+            }
+        }
+    }
+]
+```
+
+### Webhook Triggers
+
+Triggers builds via GitHub or Generic webhooks:
+
+```python
+triggers=[
+    {
+        "type": "GitHub",
+        "github": {
+            "secret": "my-github-secret"
+        }
+    },
+    {
+        "type": "Generic",
+        "generic": {
+            "secret": "my-generic-secret"
+        }
+    }
+]
+```
+
+## Related Resources
+
+- [Build](/api-reference/openshift/build) - Represents a single build execution
+- [ImageStream](/api-reference/openshift/image-stream) - Manages container images
+- [OpenShift Builds Documentation](https://docs.openshift.com/container-platform/latest/cicd/builds/understanding-image-builds.html)
+
+## See Also
+
+- [Core Concepts: Resources](/core-concepts/resources)
+- [NamespacedResource Base Class](/api-reference/namespaced-resource)
+- [Working with Builds Guide](/guides/working-with-builds)

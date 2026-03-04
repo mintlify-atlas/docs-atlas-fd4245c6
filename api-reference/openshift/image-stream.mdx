@@ -1,0 +1,465 @@
+---
+title: 'ImageStream'
+description: 'OpenShift ImageStream resource for managing container image references'
+---
+
+## Overview
+
+The `ImageStream` class represents an OpenShift ImageStream object, which provides an abstraction for referencing container images. ImageStreams enable you to track and manage images from multiple registries, automatically trigger builds and deployments when images change, and provide a stable reference to images that may change over time.
+
+**Source:** `ocp_resources/image_stream.py:5`
+
+**API Reference:** [OpenShift ImageStream API](https://docs.openshift.com/container-platform/4.11/rest_api/image_apis/imagestream-image-openshift-io-v1.html)
+
+## Class Definition
+
+```python
+from ocp_resources.image_stream import ImageStream
+
+class ImageStream(NamespacedResource):
+    api_group = NamespacedResource.ApiGroup.IMAGE_OPENSHIFT_IO
+```
+
+## Constructor
+
+```python
+ImageStream(
+    name=None,
+    namespace=None,
+    client=None,
+    lookup_policy=False,
+    tags=None,
+    teardown=True,
+    yaml_file=None,
+    delete_timeout=TIMEOUT_4MINUTES,
+    **kwargs
+)
+```
+
+### Parameters
+
+<ParamField path="name" type="str" default="None">
+  Name of the ImageStream resource. If not provided, it must be specified in the YAML file.
+</ParamField>
+
+<ParamField path="namespace" type="str" default="None">
+  Namespace where the ImageStream will be created. Required for namespaced resources.
+</ParamField>
+
+<ParamField path="client" type="DynamicClient" default="None">
+  Kubernetes dynamic client for API communication. If not provided, the default client will be used.
+</ParamField>
+
+<ParamField path="lookup_policy" type="bool" default="False">
+  Controls whether image references can use the ImageStream name directly in pod specs. When set to True (local lookup enabled), pods can reference images using the ImageStream name instead of the full registry path.
+  
+  Example: With local lookup, you can use `my-app:latest` instead of `image-registry.openshift-image-registry.svc:5000/myproject/my-app:latest`
+</ParamField>
+
+<ParamField path="tags" type="list[dict[str, Any]]" default="None">
+  List of image tags to track in this ImageStream. Each tag can reference images from external registries or from builds.
+  
+  Example:
+  ```python
+  [
+      {
+          "name": "latest",
+          "from": {
+              "kind": "DockerImage",
+              "name": "docker.io/library/nginx:latest"
+          },
+          "importPolicy": {"scheduled": True}
+      }
+  ]
+  ```
+</ParamField>
+
+<ParamField path="teardown" type="bool" default="True">
+  If True, the resource will be automatically deleted when used as a context manager.
+</ParamField>
+
+<ParamField path="yaml_file" type="str" default="None">
+  Path to a YAML file containing the ImageStream definition. If provided, the ImageStream will be created from this file.
+</ParamField>
+
+<ParamField path="delete_timeout" type="int" default="TIMEOUT_4MINUTES">
+  Timeout in seconds for delete operations. Defaults to 4 minutes.
+</ParamField>
+
+<ParamField path="**kwargs" type="Any">
+  Additional keyword arguments passed to the parent `NamespacedResource` class. Common options include `label` and `annotations`.
+</ParamField>
+
+## Usage Examples
+
+### Basic ImageStream
+
+Create a simple ImageStream without tags:
+
+```python
+from ocp_resources.image_stream import ImageStream
+
+image_stream = ImageStream(
+    name="my-app",
+    namespace="default",
+    lookup_policy=True
+)
+image_stream.deploy()
+```
+
+### ImageStream with External Image
+
+Create an ImageStream that tracks an external Docker image:
+
+```python
+from ocp_resources.image_stream import ImageStream
+
+image_stream = ImageStream(
+    name="nginx",
+    namespace="default",
+    lookup_policy=True,
+    tags=[
+        {
+            "name": "latest",
+            "from": {
+                "kind": "DockerImage",
+                "name": "docker.io/library/nginx:latest"
+            },
+            "importPolicy": {
+                "scheduled": True  # Periodically check for updates
+            },
+            "referencePolicy": {
+                "type": "Local"  # Store image in internal registry
+            }
+        }
+    ]
+)
+image_stream.deploy()
+```
+
+### Multiple Tags
+
+Create an ImageStream with multiple version tags:
+
+```python
+from ocp_resources.image_stream import ImageStream
+
+image_stream = ImageStream(
+    name="python-app",
+    namespace="default",
+    lookup_policy=True,
+    tags=[
+        {
+            "name": "3.9",
+            "from": {
+                "kind": "DockerImage",
+                "name": "registry.access.redhat.com/ubi8/python-39:latest"
+            }
+        },
+        {
+            "name": "3.11",
+            "from": {
+                "kind": "DockerImage",
+                "name": "registry.access.redhat.com/ubi9/python-311:latest"
+            }
+        },
+        {
+            "name": "latest",
+            "from": {
+                "kind": "ImageStreamTag",
+                "name": "python-app:3.11"  # Point to another tag
+            }
+        }
+    ]
+)
+image_stream.deploy()
+```
+
+### ImageStream for Build Output
+
+Create an ImageStream to store build outputs:
+
+```python
+from ocp_resources.image_stream import ImageStream
+
+# This ImageStream will be populated by BuildConfig output
+image_stream = ImageStream(
+    name="my-build-output",
+    namespace="default",
+    lookup_policy=True,
+    tags=[
+        {
+            "name": "latest",
+            "annotations": {
+                "description": "Latest build of my application"
+            }
+        }
+    ]
+)
+image_stream.deploy()
+```
+
+### Scheduled Image Import
+
+Create an ImageStream that periodically checks for image updates:
+
+```python
+from ocp_resources.image_stream import ImageStream
+
+image_stream = ImageStream(
+    name="auto-updated",
+    namespace="default",
+    lookup_policy=True,
+    tags=[
+        {
+            "name": "latest",
+            "from": {
+                "kind": "DockerImage",
+                "name": "quay.io/example/app:latest"
+            },
+            "importPolicy": {
+                "scheduled": True,  # Enable periodic import
+                "insecure": False   # Require TLS verification
+            },
+            "referencePolicy": {
+                "type": "Local"     # Import to internal registry
+            }
+        }
+    ]
+)
+image_stream.deploy()
+```
+
+### Creating from YAML
+
+Create an ImageStream from a YAML file:
+
+```python
+from ocp_resources.image_stream import ImageStream
+
+image_stream = ImageStream(
+    namespace="default",
+    yaml_file="imagestream.yaml"
+)
+image_stream.deploy()
+```
+
+### Using Context Manager
+
+Automatically clean up the ImageStream after use:
+
+```python
+from ocp_resources.image_stream import ImageStream
+
+with ImageStream(
+    name="temp-images",
+    namespace="default",
+    lookup_policy=True
+) as img_stream:
+    print(f"ImageStream created: {img_stream.name}")
+    # ImageStream is automatically deleted when exiting
+```
+
+### Accessing ImageStream Tags
+
+Query ImageStream tags and image information:
+
+```python
+from ocp_resources.image_stream import ImageStream
+
+image_stream = ImageStream(
+    name="my-app",
+    namespace="default"
+)
+
+if image_stream.exists:
+    # Access status information
+    status = image_stream.instance.status
+    
+    # List all tags
+    if hasattr(status, 'tags'):
+        for tag in status.tags:
+            print(f"Tag: {tag.tag}")
+            if hasattr(tag, 'items') and tag.items:
+                latest_image = tag.items[0]
+                print(f"  Image: {latest_image.dockerImageReference}")
+                print(f"  Created: {latest_image.created}")
+```
+
+## Tag Configuration
+
+### Import Policy
+
+Controls how images are imported:
+
+```python
+"importPolicy": {
+    "scheduled": True,    # Periodically re-import image
+    "insecure": False     # Require TLS for registry
+}
+```
+
+### Reference Policy
+
+Controls how image references are stored:
+
+```python
+"referencePolicy": {
+    "type": "Local"  # Options: "Local" or "Source"
+}
+```
+
+- **Local**: Images are imported to the internal OpenShift registry
+- **Source**: References point to the original external registry
+
+### Tag Annotations
+
+Add metadata to tags:
+
+```python
+"annotations": {
+    "description": "Production-ready image",
+    "version": "1.0.0",
+    "supports": "Python 3.9"
+}
+```
+
+## Image Reference Types
+
+### Docker Image
+
+Reference an external container image:
+
+```python
+"from": {
+    "kind": "DockerImage",
+    "name": "registry.example.com/org/image:tag"
+}
+```
+
+### ImageStreamTag
+
+Reference another tag within the same or different ImageStream:
+
+```python
+"from": {
+    "kind": "ImageStreamTag",
+    "name": "another-stream:tag",
+    "namespace": "other-namespace"  # Optional
+}
+```
+
+### ImageStreamImage
+
+Reference a specific image by digest:
+
+```python
+"from": {
+    "kind": "ImageStreamImage",
+    "name": "my-app@sha256:abc123..."
+}
+```
+
+## Common Use Cases
+
+### Build Output Storage
+
+ImageStreams are commonly used as build output destinations:
+
+```python
+# In BuildConfig
+output={
+    "to": {
+        "kind": "ImageStreamTag",
+        "name": "my-app:latest"
+    }
+}
+```
+
+### Deployment Triggers
+
+ImageStreams trigger automatic deployments when images change:
+
+```python
+# In DeploymentConfig
+triggers=[
+    {
+        "type": "ImageChange",
+        "imageChangeParams": {
+            "automatic": True,
+            "containerNames": ["app"],
+            "from": {
+                "kind": "ImageStreamTag",
+                "name": "my-app:latest"
+            }
+        }
+    }
+]
+```
+
+### Image Mirroring
+
+Mirror external images to the internal registry:
+
+```python
+ImageStream(
+    name="mirrored-image",
+    namespace="default",
+    tags=[
+        {
+            "name": "v1.0",
+            "from": {
+                "kind": "DockerImage",
+                "name": "external-registry.com/app:v1.0"
+            },
+            "referencePolicy": {"type": "Local"},
+            "importPolicy": {"scheduled": True}
+        }
+    ]
+)
+```
+
+## OpenShift Internal Registry
+
+ImageStreams automatically integrate with OpenShift's internal registry:
+
+**Registry URL Format:**
+```
+image-registry.openshift-image-registry.svc:5000/<namespace>/<imagestream>:<tag>
+```
+
+**Example:**
+```
+image-registry.openshift-image-registry.svc:5000/default/my-app:latest
+```
+
+## Lookup Policy
+
+When `lookup_policy` is enabled:
+
+```python
+lookup_policy=True
+```
+
+Pods can reference images using short names:
+
+```python
+# Instead of:
+image: "image-registry.openshift-image-registry.svc:5000/default/my-app:latest"
+
+# You can use:
+image: "my-app:latest"
+```
+
+## Related Resources
+
+- [BuildConfig](/api-reference/openshift/build-config) - Uses ImageStreams for output
+- [DeploymentConfig](/api-reference/openshift/deployment-config) - Uses ImageStreams for triggers
+- [ImageStreamTag](/api-reference/openshift/image-stream-tag) - Individual tag within an ImageStream
+- [OpenShift ImageStream Documentation](https://docs.openshift.com/container-platform/latest/openshift_images/image-streams-manage.html)
+
+## See Also
+
+- [Working with Images Guide](/guides/working-with-images)
+- [Core Concepts: Resources](/core-concepts/resources)
+- [NamespacedResource Base Class](/api-reference/namespaced-resource)

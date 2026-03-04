@@ -1,0 +1,511 @@
+---
+title: Fake Kubernetes Client
+description: Mock Kubernetes client for testing without a real cluster
+icon: server
+---
+
+The fake Kubernetes client provides a complete mock implementation of the Kubernetes dynamic client, allowing you to test Kubernetes-related code without needing an actual cluster.
+
+## Features
+
+<CardGroup cols={2}>
+
+<Card title="Full CRUD Operations" icon="database">
+Create, Read, Update, and Delete operations for all resources
+</Card>
+
+<Card title="Custom Resources" icon="cube">
+Support for standard Kubernetes resources and CRDs
+</Card>
+
+<Card title="Label & Field Selectors" icon="filter">
+Filter resources using labels and field selectors
+</Card>
+
+<Card title="Watch Operations" icon="eye">
+Watch functionality with event generation
+</Card>
+
+<Card title="Realistic Status" icon="circle-check">
+Automatic status generation for resources
+</Card>
+
+<Card title="Namespace Support" icon="folder">
+Full namespace isolation and management
+</Card>
+
+</CardGroup>
+
+## Installation & Setup
+
+The fake client is included with `openshift-python-wrapper`. To use it in your tests:
+
+```python
+from ocp_resources.resource import get_client
+
+# Create a fake client
+fake_client = get_client(fake=True)
+
+# Use it like a real Kubernetes dynamic client
+api = fake_client.resources.get(api_version="v1", kind="Pod")
+```
+
+## Basic Usage
+
+### Creating Resources
+
+Create resources using standard Kubernetes manifests:
+
+```python
+# Create a Pod
+pod = {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+        "name": "test-pod",
+        "namespace": "default"
+    },
+    "spec": {
+        "containers": [{
+            "name": "nginx",
+            "image": "nginx:latest"
+        }]
+    }
+}
+
+created_pod = api.create(body=pod, namespace="default")
+print(created_pod.metadata.name)  # test-pod
+print(created_pod.status.phase)  # Running
+```
+
+### Listing Resources
+
+```python
+# List all pods in a namespace
+pods = api.get(namespace="default")
+for pod in pods.items:
+    print(pod.metadata.name)
+
+# List with label selector
+pods = api.get(namespace="default", label_selector="app=nginx")
+for pod in pods.items:
+    print(f"{pod.metadata.name} - {pod.metadata.labels}")
+```
+
+### Updating Resources
+
+```python
+# Get and update a pod
+pod = api.get(name="test-pod", namespace="default")
+pod.metadata.labels = {"app": "nginx", "version": "v1"}
+
+updated = api.patch(
+    name="test-pod",
+    namespace="default",
+    body=pod
+)
+
+print(updated.metadata.labels)  # {'app': 'nginx', 'version': 'v1'}
+```
+
+### Deleting Resources
+
+```python
+# Delete a pod
+api.delete(name="test-pod", namespace="default")
+
+# Verify deletion
+try:
+    api.get(name="test-pod", namespace="default")
+except Exception:
+    print("Pod successfully deleted")
+```
+
+### Watch Operations
+
+```python
+# Watch for resource changes
+count = 0
+for event in api.watch(namespace="default", timeout=5):
+    print(f"{event['type']}: {event['object'].metadata.name}")
+    count += 1
+    if count >= 3:
+        break
+```
+
+## Configuring Resource Ready Status
+
+You can configure resources to be in a "not ready" state for testing failure scenarios.
+
+### Using Annotations
+
+Add the `fake-client.io/ready` annotation to any resource:
+
+```python
+# Create a Pod that's not ready
+pod = {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+        "name": "not-ready-pod",
+        "namespace": "default",
+        "annotations": {
+            "fake-client.io/ready": "false"  # Pod will be not ready
+        }
+    },
+    "spec": {
+        "containers": [{
+            "name": "nginx",
+            "image": "nginx:latest"
+        }]
+    }
+}
+
+created_pod = api.create(body=pod, namespace="default")
+print(created_pod.status.phase)  # Pending
+print(created_pod.status.conditions)  # Ready condition will be False
+```
+
+<Note>
+For Pods specifically, you can also use `fake-client.io/pod-ready` annotation for backward compatibility.
+</Note>
+
+### Using Spec Field
+
+Alternatively, use `readyStatus` in the spec:
+
+```python
+deployment = {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+        "name": "not-ready-deployment",
+        "namespace": "default"
+    },
+    "spec": {
+        "readyStatus": False,  # Deployment will be not ready
+        "replicas": 3,
+        "selector": {"matchLabels": {"app": "nginx"}},
+        "template": {
+            "metadata": {"labels": {"app": "nginx"}},
+            "spec": {
+                "containers": [{
+                    "name": "nginx",
+                    "image": "nginx:latest"
+                }]
+            }
+        }
+    }
+}
+
+created = api.create(body=deployment, namespace="default")
+print(created.status.readyReplicas)  # 0
+print(created.status.conditions)  # Available condition will be False
+```
+
+### Resource-Specific Behavior
+
+Different resources behave differently when not ready:
+
+<AccordionGroup>
+
+<Accordion title="Pods">
+Show as not ready with containers in waiting state:
+- `status.phase`: `Pending`
+- Container states show as `waiting`
+- Ready condition is `False`
+</Accordion>
+
+<Accordion title="Deployments">
+Show 0 ready replicas and unavailable condition:
+- `status.readyReplicas`: `0`
+- `status.availableReplicas`: `0`
+- Available condition is `False`
+</Accordion>
+
+<Accordion title="Namespaces">
+Show as Terminating phase:
+- `status.phase`: `Terminating`
+</Accordion>
+
+<Accordion title="Other Resources">
+Show Ready condition as False:
+- Ready condition set to `False`
+- Resource-specific status fields reflect not-ready state
+</Accordion>
+
+</AccordionGroup>
+
+## Custom Resources
+
+The fake client automatically supports any Custom Resource:
+
+```python
+# Access a custom resource
+crd_api = fake_client.resources.get(
+    api_version="example.com/v1",
+    kind="MyCustomResource"
+)
+
+# Create custom resource
+custom_resource = {
+    "apiVersion": "example.com/v1",
+    "kind": "MyCustomResource",
+    "metadata": {"name": "my-resource"},
+    "spec": {"foo": "bar"}
+}
+
+created = crd_api.create(body=custom_resource)
+print(created.spec.foo)  # bar
+```
+
+## Advanced Features
+
+### Automatic Namespace Creation
+
+Namespaces are automatically created when you create resources in non-existent namespaces:
+
+```python
+# This will auto-create the "new-namespace" namespace
+pod = api.create(body=pod_manifest, namespace="new-namespace")
+
+# Verify namespace was created
+ns_api = fake_client.resources.get(api_version="v1", kind="Namespace")
+namespace = ns_api.get(name="new-namespace")
+print(namespace.status.phase)  # Active
+```
+
+### Realistic Resource Status
+
+Resources automatically get realistic status fields:
+
+```python
+# Pods get running status
+pod = api.get(name="test-pod", namespace="default")
+print(pod.status.phase)  # "Running"
+print(pod.status.containerStatuses[0].ready)  # True
+print(pod.status.containerStatuses[0].state.running)  # Present
+
+# Deployments get replica counts
+deployment = deployment_api.get(name="test-deployment", namespace="default")
+print(deployment.status.readyReplicas)  # Matches spec.replicas
+print(deployment.status.conditions[0].type)  # "Available"
+print(deployment.status.conditions[0].status)  # "True"
+```
+
+### OpenShift Resources
+
+The client includes OpenShift-specific resources:
+
+```python
+# Work with OpenShift routes
+route_api = fake_client.resources.get(
+    api_version="route.openshift.io/v1",
+    kind="Route"
+)
+
+route = {
+    "apiVersion": "route.openshift.io/v1",
+    "kind": "Route",
+    "metadata": {"name": "my-route", "namespace": "default"},
+    "spec": {
+        "to": {"kind": "Service", "name": "my-service"},
+        "port": {"targetPort": "http"}
+    }
+}
+
+created_route = route_api.create(body=route, namespace="default")
+print(created_route.spec.host)  # Auto-generated host
+```
+
+## Testing Patterns
+
+### Using Pytest Fixtures
+
+```python
+import pytest
+from ocp_resources.resource import get_client
+from ocp_resources.pod import Pod
+
+@pytest.fixture(scope="class")
+def fake_client():
+    """Fixture that provides a fake client for testing"""
+    return get_client(fake=True)
+
+@pytest.fixture(scope="class")
+def test_pod(fake_client):
+    """Create a test pod"""
+    pod = Pod(
+        client=fake_client,
+        name="test-pod",
+        namespace="default",
+        containers=[{"name": "nginx", "image": "nginx:latest"}]
+    )
+    deployed = pod.deploy()
+    yield deployed
+    pod.clean_up()
+
+def test_pod_creation(test_pod):
+    """Test pod is created successfully"""
+    assert test_pod.exists
+    assert test_pod.name == "test-pod"
+    assert test_pod.status == Pod.Status.RUNNING
+```
+
+### Testing Resource Lifecycle
+
+```python
+def test_resource_lifecycle(fake_client):
+    """Test complete resource lifecycle"""
+    from ocp_resources.namespace import Namespace
+    
+    # Create
+    ns = Namespace(client=fake_client, name="test-ns")
+    ns.deploy()
+    assert ns.exists
+    
+    # Read
+    assert ns.status == Namespace.Status.ACTIVE
+    
+    # Update
+    ns_dict = ns.instance.to_dict()
+    ns_dict["metadata"]["labels"] = {"env": "test"}
+    ns.update(resource_dict=ns_dict)
+    assert ns.labels["env"] == "test"
+    
+    # Delete
+    ns.clean_up(wait=False)
+    assert not ns.exists
+```
+
+### Testing Error Conditions
+
+```python
+def test_not_ready_pod(fake_client):
+    """Test handling of not-ready pods"""
+    from ocp_resources.pod import Pod
+    
+    pod = Pod(
+        client=fake_client,
+        name="broken-pod",
+        namespace="default",
+        containers=[{"name": "app", "image": "myapp:latest"}],
+        annotations={"fake-client.io/ready": "false"}
+    )
+    
+    deployed = pod.deploy()
+    
+    # Pod should not be ready
+    with pytest.raises(TimeoutError):
+        pod.wait_for_condition(
+            condition=Pod.Condition.READY,
+            status=Pod.Condition.Status.TRUE,
+            timeout=5
+        )
+```
+
+## Limitations
+
+<Warning>
+The fake client is designed for testing and has some limitations:
+</Warning>
+
+<AccordionGroup>
+
+<Accordion title="No Real Execution">
+No real networking or pod execution occurs. Containers don't actually run.
+</Accordion>
+
+<Accordion title="Simplified Watch">
+Watch implementation provides immediate events only, not continuous streaming.
+</Accordion>
+
+<Accordion title="Limited Field Selectors">
+Only `metadata.name` and `metadata.namespace` field selectors are supported.
+</Accordion>
+
+<Accordion title="No Admission Control">
+No admission webhooks or validation beyond basic structure checking.
+</Accordion>
+
+<Accordion title="Simplified Status">
+Status updates are simplified and may not reflect all real-world complexities.
+</Accordion>
+
+</AccordionGroup>
+
+## Complete Testing Example
+
+```python
+import pytest
+from ocp_resources.resource import get_client
+from ocp_resources.namespace import Namespace
+from ocp_resources.pod import Pod
+from ocp_resources.service import Service
+
+@pytest.fixture(scope="class")
+def fake_client():
+    return get_client(fake=True)
+
+class TestApplication:
+    """Test a complete application deployment"""
+    
+    @pytest.fixture(scope="class")
+    def namespace(self, fake_client):
+        ns = Namespace(client=fake_client, name="test-app")
+        ns.deploy()
+        yield ns
+        ns.clean_up()
+    
+    def test_deploy_pod(self, fake_client, namespace):
+        """Test deploying a pod"""
+        pod = Pod(
+            client=fake_client,
+            name="app-pod",
+            namespace=namespace.name,
+            containers=[{
+                "name": "app",
+                "image": "myapp:v1.0",
+                "ports": [{"containerPort": 8080}]
+            }],
+            labels={"app": "myapp"}
+        )
+        
+        deployed = pod.deploy()
+        assert deployed.exists
+        assert deployed.status == Pod.Status.RUNNING
+        
+        # Cleanup
+        pod.clean_up()
+    
+    def test_deploy_service(self, fake_client, namespace):
+        """Test deploying a service"""
+        service = Service(
+            client=fake_client,
+            name="app-service",
+            namespace=namespace.name,
+            selector={"app": "myapp"},
+            ports=[{"port": 80, "targetPort": 8080}]
+        )
+        
+        deployed = service.deploy()
+        assert deployed.exists
+        assert deployed.spec.selector["app"] == "myapp"
+        
+        # Cleanup
+        service.clean_up()
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Testing Guide" href="./testing" icon="vial">
+Learn comprehensive testing patterns and best practices
+</Card>
+
+<Card title="Class Generator" href="./class-generator" icon="code">
+Generate wrapper classes for your resources
+</Card>
+
+</CardGroup>

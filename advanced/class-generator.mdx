@@ -1,0 +1,382 @@
+---
+title: Class Generator
+description: Automatically generate Python wrapper classes for Kubernetes and OpenShift resources
+icon: code
+---
+
+The class generator is a powerful utility that automatically creates Python wrapper classes for Kubernetes and OpenShift resources based on their CRDs (Custom Resource Definitions). It ensures your wrapper library stays in sync with cluster resources.
+
+## Installation
+
+<CodeGroup>
+
+```bash uv (Recommended)
+uv tool install openshift-python-wrapper
+```
+
+```bash pip
+python3 -m pip install openshift-python-wrapper
+```
+
+</CodeGroup>
+
+### Shell Completion
+
+For enhanced CLI experience, add shell completion to your profile:
+
+```bash
+# Add to ~/.bashrc or ~/.zshrc
+if type class-generator > /dev/null; then 
+  eval "$(_CLASS_GENERATOR_COMPLETE=zsh_source class-generator)"
+fi
+```
+
+## Basic Usage
+
+### Generating Classes for Specific Resources
+
+Generate wrapper classes for one or more resource kinds:
+
+<CodeGroup>
+
+```bash Single Resource
+class-generator --kind Pod
+```
+
+```bash Multiple Resources
+class-generator --kind Pod,Service,Deployment
+```
+
+</CodeGroup>
+
+The generator will:
+- Fetch the resource schema from your cluster
+- Generate a Python class with proper attributes
+- Create the file in the appropriate location (e.g., `pod.py`, `service.py`)
+
+<Note>
+Review generated files to ensure naming conventions are correct:
+- `OATH` → `oath`
+- `CDIConfig` → `cdi_config`
+</Note>
+
+### View All Options
+
+```bash
+class-generator --help
+```
+
+## Overwriting Existing Files
+
+When regenerating or updating existing resource files, use the `--overwrite` flag with `--backup` to preserve existing files:
+
+```bash
+class-generator --kind Deployment --overwrite --backup
+```
+
+<Info>
+Backups are stored in `.backups/backup-YYYYMMDD-HHMMSS/` with the original directory structure preserved.
+</Info>
+
+## Discovering Missing Resources
+
+The class-generator can automatically discover resources in your cluster that don't have wrapper classes yet. Discovery runs in parallel for 3-5x faster performance.
+
+### Basic Discovery
+
+Discover missing resources and generate a coverage report:
+
+```bash
+class-generator --discover-missing
+```
+
+### JSON Output for CI/CD
+
+Generate machine-readable output for automation:
+
+```bash
+class-generator --discover-missing --json
+```
+
+### Disable Cache
+
+Force fresh discovery without using cached results:
+
+```bash
+class-generator --discover-missing --no-cache
+```
+
+<Note>
+Discovery results are cached for 24 hours in `~/.cache/openshift-python-wrapper/` for improved performance.
+</Note>
+
+## Coverage Report
+
+The coverage report provides detailed information about resource implementation status.
+
+### Understanding the Report
+
+<AccordionGroup>
+
+<Accordion title="Coverage Metrics">
+- **Total Discovered Resources**: All resources found in the cluster (including CRDs)
+- **Total Implemented**: Number of Python wrapper classes in `ocp_resources/`
+- **Covered Resources**: Resources that have corresponding wrapper classes
+- **Total Missing**: Resources without wrapper implementations
+- **Coverage Percentage**: Percentage of discovered resources with implementations
+</Accordion>
+
+<Accordion title="Priority Levels">
+Resources are prioritized as:
+- **CORE**: Essential Kubernetes resources (v1 API group)
+- **HIGH**: Common workload resources (apps/v1, batch/v1)
+- **MEDIUM**: Platform-specific resources (OpenShift, operators)
+- **LOW**: Custom resources and less common APIs
+</Accordion>
+
+</AccordionGroup>
+
+### Example Output
+
+```text
+Resource Coverage Report
+
+╭─────────────────────────── Coverage Statistics ────────────────────────────╮
+│ Total Discovered Resources: 397                                             │
+│ Total Implemented: 197                                                      │
+│ Covered Resources: 172                                                      │
+│ Total Missing: 225                                                          │
+│ Coverage Percentage: 43.32%                                                 │
+╰─────────────────────────────────────────────────────────────────────────────╯
+
+Missing Resources (sorted by priority)
+
+┏━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┓
+┃ Priority   ┃ Kind                          ┃ API Version                   ┃ Namespaced ┃
+┡━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━┩
+│ CORE       │ Binding                       │ v1                            │ Yes        │
+│ CORE       │ ComponentStatus               │ v1                            │ No         │
+│ HIGH       │ ControllerRevision            │ apps/v1                       │ Yes        │
+│ MEDIUM     │ ClusterResourceQuota          │ quota.openshift.io/v1         │ No         │
+└────────────┴───────────────────────────────┴───────────────────────────────┴────────────┘
+
+Tip: You can generate multiple resources at once:
+  class-generator -k Binding,ComponentStatus,ControllerRevision
+```
+
+## Batch Operations
+
+### Regenerate All Resources
+
+Regenerate all existing wrapper classes (useful after cluster upgrades):
+
+```bash
+class-generator --regenerate-all --backup
+```
+
+<Warning>
+This operation will regenerate all classes. Always use `--backup` to preserve existing files.
+</Warning>
+
+## Adding Tests
+
+Automatically generate tests for new resources:
+
+```bash
+class-generator --kind Pod --add-tests
+```
+
+This creates a test file in `tests/test_resources/test_pod.py` with standard CRUD operations.
+
+## Updating Schema Files
+
+Schema files contain resource definitions used by the class generator. Update them from a connected Kubernetes/OpenShift cluster.
+
+### Prerequisites
+
+<CardGroup cols={3}>
+
+<Card title="Cluster Access" icon="server">
+Kubernetes/OpenShift cluster with admin access
+</Card>
+
+<Card title="CLI Tools" icon="terminal">
+[oc](https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/stable/) or [kubectl](https://kubernetes.io/docs/tasks/tools/)
+</Card>
+
+<Card title="UV" icon="package">
+[uv](https://github.com/astral-sh/uv) package manager
+</Card>
+
+</CardGroup>
+
+### Full Schema Update
+
+Update the entire schema from the connected cluster:
+
+```bash
+class-generator --update-schema
+```
+
+<Info>
+If connected to an older cluster, existing schemas are preserved and only missing resources are added.
+</Info>
+
+### Single Resource Schema Update
+
+Update the schema for a single resource without affecting others:
+
+```bash
+class-generator --update-schema-for LlamaStackDistribution
+```
+
+This is useful when:
+- Connected to an older cluster but need to update a specific CRD
+- A new operator was installed and you need its resource schema
+- You want to refresh just one resource without a full update
+
+After updating the schema, regenerate the class:
+
+```bash
+class-generator --kind LlamaStackDistribution --overwrite
+```
+
+<Warning>
+`--update-schema` and `--update-schema-for` are mutually exclusive. Use one or the other, not both.
+</Warning>
+
+## Advanced Workflows
+
+### Workflow 1: Adding a New CRD
+
+<Steps>
+
+<Step title="Install the operator">
+Install your operator in the cluster
+</Step>
+
+<Step title="Update the schema">
+```bash
+class-generator --update-schema-for MyCustomResource
+```
+</Step>
+
+<Step title="Generate the class">
+```bash
+class-generator --kind MyCustomResource --add-tests
+```
+</Step>
+
+<Step title="Review and test">
+Review the generated class and run tests
+</Step>
+
+</Steps>
+
+### Workflow 2: Cluster Upgrade
+
+<Steps>
+
+<Step title="Backup existing classes">
+Ensure you have version control or backups
+</Step>
+
+<Step title="Update all schemas">
+```bash
+class-generator --update-schema
+```
+</Step>
+
+<Step title="Regenerate all classes">
+```bash
+class-generator --regenerate-all --backup
+```
+</Step>
+
+<Step title="Run tests">
+Run your test suite to verify compatibility
+</Step>
+
+</Steps>
+
+### Workflow 3: Coverage Analysis
+
+<Steps>
+
+<Step title="Discover missing resources">
+```bash
+class-generator --discover-missing
+```
+</Step>
+
+<Step title="Prioritize resources">
+Review the report and select high-priority resources
+</Step>
+
+<Step title="Generate selected resources">
+```bash
+class-generator --kind Resource1,Resource2,Resource3
+```
+</Step>
+
+</Steps>
+
+## Best Practices
+
+<CardGroup cols={2}>
+
+<Card title="Always Use Backups" icon="floppy-disk">
+Use `--backup` when overwriting existing files to prevent data loss
+</Card>
+
+<Card title="Test Generated Classes" icon="flask">
+Use `--add-tests` to generate tests for new resources
+</Card>
+
+<Card title="Keep Schemas Updated" icon="arrows-rotate">
+Regularly update schemas after cluster upgrades or operator installations
+</Card>
+
+<Card title="Review Generated Code" icon="eye">
+Always review generated classes for naming conventions and correctness
+</Card>
+
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+
+<Accordion title="Schema not found error">
+Ensure you're connected to a cluster and the resource exists:
+```bash
+kubectl api-resources | grep <kind>
+```
+</Accordion>
+
+<Accordion title="Permission denied">
+Ensure you have cluster-admin privileges:
+```bash
+kubectl auth can-i get customresourcedefinitions
+```
+</Accordion>
+
+<Accordion title="Generated file in wrong location">
+The generator uses naming conventions to determine file placement. Check the resource's API group and version.
+</Accordion>
+
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Testing" href="./testing" icon="vial">
+Learn how to test your generated classes with the fake client
+</Card>
+
+<Card title="Fake Client" href="./fake-client" icon="server">
+Explore the fake Kubernetes client for testing
+</Card>
+
+</CardGroup>

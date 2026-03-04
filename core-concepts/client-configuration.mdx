@@ -1,0 +1,668 @@
+---
+title: Client Configuration
+description: Configure your Kubernetes client connection for cluster access
+---
+
+The `get_client()` function provides a flexible way to create a Kubernetes client for interacting with your cluster. It supports multiple authentication methods and configuration options.
+
+## Basic Client Creation
+
+The simplest way to get a client is to call `get_client()` without arguments:
+
+```python
+from ocp_resources.resource import get_client
+
+# Uses default kubeconfig from ~/.kube/config or KUBECONFIG env var
+client = get_client()
+```
+
+This function is defined in `ocp_resources/resource.py:195` and returns a `DynamicClient` instance.
+
+## Configuration Methods
+
+There are several ways to configure your client connection:
+
+### Method 1: Default Kubeconfig
+
+```python
+from ocp_resources.resource import get_client
+
+# Uses kubeconfig from:
+# 1. KUBECONFIG environment variable
+# 2. ~/.kube/config (default location)
+client = get_client()
+```
+
+### Method 2: Custom Kubeconfig File
+
+```python
+from ocp_resources.resource import get_client
+
+# Specify a custom kubeconfig file
+client = get_client(
+    config_file="/path/to/my/kubeconfig"
+)
+```
+
+### Method 3: Kubeconfig Dictionary
+
+```python
+from ocp_resources.resource import get_client
+import yaml
+
+# Load kubeconfig from dictionary
+with open("/path/to/kubeconfig") as f:
+    config_dict = yaml.safe_load(f)
+
+client = get_client(
+    config_dict=config_dict
+)
+```
+
+### Method 4: Specific Context
+
+```python
+from ocp_resources.resource import get_client
+
+# Use a specific context from kubeconfig
+client = get_client(
+    config_file="~/.kube/config",
+    context="production-cluster"
+)
+```
+
+### Method 5: Token Authentication
+
+```python
+from ocp_resources.resource import get_client
+
+# Authenticate with token
+client = get_client(
+    host="https://api.mycluster.com:6443",
+    token="my-bearer-token",
+    verify_ssl=False  # Only for testing!
+)
+```
+
+### Method 6: Basic Authentication
+
+```python
+from ocp_resources.resource import get_client
+
+# Authenticate with username and password
+client = get_client(
+    username="admin",
+    password="password123",
+    host="https://api.mycluster.com:6443",
+    verify_ssl=True
+)
+```
+
+## Client Configuration Parameters
+
+The `get_client()` function accepts these parameters:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `config_file` | `str \| None` | Path to a kubeconfig file |
+| `config_dict` | `dict \| None` | Kubeconfig as a dictionary |
+| `context` | `str \| None` | Context name to use from kubeconfig |
+| `client_configuration` | `Configuration \| None` | Kubernetes client configuration object |
+| `persist_config` | `bool` | Whether to persist config file (default: True) |
+| `temp_file_path` | `str \| None` | Path for temporary kubeconfig file |
+| `try_refresh_token` | `bool` | Try to refresh token if expired (default: True) |
+| `username` | `str \| None` | Username for basic authentication |
+| `password` | `str \| None` | Password for basic authentication |
+| `host` | `str \| None` | Cluster API server URL |
+| `verify_ssl` | `bool \| None` | Verify SSL certificates (default: True) |
+| `token` | `str \| None` | Bearer token for authentication |
+| `fake` | `bool` | Use fake client for testing (default: False) |
+
+## Advanced Configuration
+
+### Custom Client Configuration
+
+```python
+from ocp_resources.resource import get_client
+import kubernetes
+
+# Create custom configuration
+config = kubernetes.client.Configuration()
+config.host = "https://api.mycluster.com:6443"
+config.verify_ssl = True
+config.api_key = {"authorization": "Bearer my-token"}
+
+# Use custom configuration
+client = get_client(client_configuration=config)
+```
+
+### SSL Configuration
+
+```python
+from ocp_resources.resource import get_client
+import kubernetes
+
+config = kubernetes.client.Configuration()
+
+# Disable SSL verification (not recommended for production!)
+client = get_client(
+    host="https://api.mycluster.com:6443",
+    token="my-token",
+    verify_ssl=False
+)
+
+# Or set CA certificate
+config.ssl_ca_cert = "/path/to/ca.crt"
+client = get_client(client_configuration=config)
+```
+
+### Proxy Configuration
+
+Proxy settings can be configured through environment variables or client configuration:
+
+```bash
+# Set proxy via environment variables
+export HTTPS_PROXY="http://proxy.example.com:8080"
+# or
+export HTTP_PROXY="http://proxy.example.com:8080"
+```
+
+```python
+from ocp_resources.resource import get_client
+import kubernetes
+
+# Proxy is automatically picked up from environment
+client = get_client()
+
+# Or set explicitly in configuration
+config = kubernetes.client.Configuration()
+config.proxy = "http://proxy.example.com:8080"
+client = get_client(client_configuration=config)
+```
+
+### In-Cluster Configuration
+
+When running inside a Kubernetes pod:
+
+```python
+from ocp_resources.resource import get_client
+
+# Automatically uses service account from pod
+client = get_client()
+
+# The client will:
+# 1. Try kubeconfig first
+# 2. Fall back to in-cluster config if kubeconfig fails
+# 3. Use /var/run/secrets/kubernetes.io/serviceaccount/token
+```
+
+## Authentication Methods
+
+### Service Account Token
+
+```python
+from ocp_resources.resource import get_client
+import os
+
+# Read token from service account
+token_path = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+with open(token_path) as f:
+    token = f.read().strip()
+
+client = get_client(
+    host="https://kubernetes.default.svc",
+    token=token,
+    verify_ssl=True
+)
+```
+
+### OAuth Token
+
+```python
+from ocp_resources.resource import get_client
+import subprocess
+
+# Get token from oc command
+token = subprocess.check_output(
+    ["oc", "whoami", "-t"],
+    text=True
+).strip()
+
+client = get_client(
+    host="https://api.mycluster.com:6443",
+    token=token
+)
+```
+
+### Certificate Authentication
+
+```python
+from ocp_resources.resource import get_client
+import kubernetes
+
+config = kubernetes.client.Configuration()
+config.host = "https://api.mycluster.com:6443"
+config.cert_file = "/path/to/client.crt"
+config.key_file = "/path/to/client.key"
+config.ssl_ca_cert = "/path/to/ca.crt"
+
+client = get_client(client_configuration=config)
+```
+
+## Multiple Clusters
+
+Managing connections to multiple clusters:
+
+```python
+from ocp_resources.resource import get_client
+from ocp_resources.namespace import Namespace
+
+# Connect to production cluster
+prod_client = get_client(
+    config_file="~/.kube/config",
+    context="production"
+)
+
+# Connect to staging cluster
+staging_client = get_client(
+    config_file="~/.kube/config",
+    context="staging"
+)
+
+# Use different clients for different resources
+prod_ns = Namespace(client=prod_client, name="prod-app")
+staging_ns = Namespace(client=staging_client, name="staging-app")
+
+prod_ns.deploy()
+staging_ns.deploy()
+```
+
+## Testing with Fake Client
+
+For testing without a real cluster:
+
+```python
+from ocp_resources.resource import get_client
+from ocp_resources.pod import Pod
+
+# Create a fake client
+client = get_client(fake=True)
+
+# All operations work but don't hit a real cluster
+pod = Pod(
+    client=client,
+    namespace="default",
+    name="test-pod",
+    containers=[{"name": "nginx", "image": "nginx"}]
+)
+pod.deploy()
+
+assert pod.exists  # Works with fake client
+```
+
+See the [Fake Kubernetes Client documentation](https://github.com/RedHatQE/openshift-python-wrapper/blob/main/fake_kubernetes_client/README.md) for more details.
+
+## Client Reuse
+
+<Info>
+Create the client once and reuse it across your application for better performance.
+</Info>
+
+### Good: Reuse Client
+
+```python
+from ocp_resources.resource import get_client
+from ocp_resources.pod import Pod
+from ocp_resources.service import Service
+
+# Create client once
+client = get_client()
+
+# Reuse for multiple resources
+pod = Pod(client=client, namespace="default", name="pod1")
+service = Service(client=client, namespace="default", name="svc1")
+
+pod.deploy()
+service.deploy()
+```
+
+### Bad: Create Multiple Clients
+
+```python
+from ocp_resources.resource import get_client
+from ocp_resources.pod import Pod
+from ocp_resources.service import Service
+
+# Don't do this - wasteful
+pod = Pod(
+    client=get_client(),  # New client
+    namespace="default",
+    name="pod1"
+)
+
+service = Service(
+    client=get_client(),  # Another new client
+    namespace="default",
+    name="svc1"
+)
+```
+
+## Environment Variables
+
+The client respects these environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|----------|
+| `KUBECONFIG` | Path to kubeconfig file | `~/.kube/config` |
+| `HTTPS_PROXY` | HTTPS proxy URL | None |
+| `HTTP_PROXY` | HTTP proxy URL | None |
+| `OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL` | Logging level | `INFO` |
+| `OPENSHIFT_PYTHON_WRAPPER_LOG_FILE` | Log file path | None (logs to console) |
+| `OPENSHIFT_PYTHON_WRAPPER_HASH_LOG_DATA` | Hash sensitive data in logs | `true` |
+
+### Example Usage
+
+```bash
+# Set kubeconfig location
+export KUBECONFIG="/path/to/my/kubeconfig"
+
+# Configure proxy
+export HTTPS_PROXY="http://proxy.example.com:8080"
+
+# Enable debug logging
+export OPENSHIFT_PYTHON_WRAPPER_LOG_LEVEL="DEBUG"
+
+# Run your script
+python my_script.py
+```
+
+## Connection Validation
+
+Validate your client connection:
+
+```python
+from ocp_resources.resource import get_client
+from kubernetes.dynamic.exceptions import ForbiddenError, NotFoundError
+
+client = get_client()
+
+try:
+    # Try to list namespaces to validate connection
+    from ocp_resources.namespace import Namespace
+    namespaces = list(Namespace.get(client=client))
+    print(f"Connected! Found {len(namespaces)} namespaces")
+    
+except ForbiddenError:
+    print("Connected but insufficient permissions")
+except NotFoundError:
+    print("Connection failed - check your configuration")
+except Exception as e:
+    print(f"Connection error: {e}")
+```
+
+## Troubleshooting
+
+### Issue: Connection Refused
+
+```python
+from ocp_resources.resource import get_client
+
+try:
+    client = get_client()
+except Exception as e:
+    print(f"Error: {e}")
+    print("Check:")
+    print("1. Is the cluster API server accessible?")
+    print("2. Is your kubeconfig correct?")
+    print("3. Is your VPN connected?")
+```
+
+### Issue: SSL Certificate Verification Failed
+
+```python
+from ocp_resources.resource import get_client
+
+# For development/testing only
+client = get_client(
+    host="https://api.mycluster.com:6443",
+    token="my-token",
+    verify_ssl=False  # Disables SSL verification
+)
+
+# Production: Use proper CA certificate
+import kubernetes
+config = kubernetes.client.Configuration()
+config.ssl_ca_cert = "/path/to/ca.crt"
+client = get_client(client_configuration=config)
+```
+
+### Issue: Context Not Found
+
+```python
+from ocp_resources.resource import get_client
+import subprocess
+
+# List available contexts
+contexts = subprocess.check_output(
+    ["kubectl", "config", "get-contexts", "-o", "name"],
+    text=True
+).strip().split('\n')
+
+print(f"Available contexts: {contexts}")
+
+# Use valid context
+client = get_client(context=contexts[0])
+```
+
+### Issue: Token Expired
+
+```python
+from ocp_resources.resource import get_client
+
+# Enable token refresh
+client = get_client(
+    try_refresh_token=True  # Default is True
+)
+
+# Or get a fresh token
+import subprocess
+token = subprocess.check_output(
+    ["oc", "whoami", "-t"],
+    text=True
+).strip()
+
+client = get_client(
+    host="https://api.mycluster.com:6443",
+    token=token
+)
+```
+
+## Security Best Practices
+
+<Warning>
+Never commit credentials or tokens to version control.
+</Warning>
+
+### Use Environment Variables
+
+```python
+import os
+from ocp_resources.resource import get_client
+
+# Read credentials from environment
+token = os.getenv("KUBE_TOKEN")
+host = os.getenv("KUBE_HOST")
+
+if not token or not host:
+    raise ValueError("KUBE_TOKEN and KUBE_HOST must be set")
+
+client = get_client(host=host, token=token)
+```
+
+### Use Secret Management
+
+```python
+from ocp_resources.resource import get_client
+import hvac  # HashiCorp Vault client
+
+# Get credentials from Vault
+vault_client = hvac.Client(url="https://vault.example.com")
+secret = vault_client.secrets.kv.v2.read_secret_version(path="kubernetes/token")
+token = secret["data"]["data"]["token"]
+
+client = get_client(
+    host="https://api.mycluster.com:6443",
+    token=token
+)
+```
+
+### Rotate Credentials
+
+```python
+from ocp_resources.resource import get_client
+import time
+
+def get_fresh_token():
+    """Get a fresh token (implement your logic)."""
+    import subprocess
+    return subprocess.check_output(
+        ["oc", "whoami", "-t"],
+        text=True
+    ).strip()
+
+class TokenRefreshingClient:
+    """Client that refreshes token periodically."""
+    
+    def __init__(self, host, token_refresh_interval=3600):
+        self.host = host
+        self.token_refresh_interval = token_refresh_interval
+        self.last_refresh = 0
+        self.client = None
+        self.refresh_client()
+    
+    def refresh_client(self):
+        """Refresh the client with a new token."""
+        token = get_fresh_token()
+        self.client = get_client(host=self.host, token=token)
+        self.last_refresh = time.time()
+    
+    def get_client(self):
+        """Get client, refreshing if needed."""
+        if time.time() - self.last_refresh > self.token_refresh_interval:
+            self.refresh_client()
+        return self.client
+
+# Usage
+client_manager = TokenRefreshingClient(
+    host="https://api.mycluster.com:6443",
+    token_refresh_interval=3600  # 1 hour
+)
+
+# Get client (automatically refreshes if needed)
+client = client_manager.get_client()
+```
+
+## Common Patterns
+
+### Pattern 1: Multi-Environment Configuration
+
+```python
+from ocp_resources.resource import get_client
+import os
+
+class ClusterConfig:
+    """Manage multiple cluster configurations."""
+    
+    CONFIGS = {
+        "dev": {
+            "host": "https://dev.example.com:6443",
+            "context": "dev-context"
+        },
+        "staging": {
+            "host": "https://staging.example.com:6443",
+            "context": "staging-context"
+        },
+        "prod": {
+            "host": "https://prod.example.com:6443",
+            "context": "prod-context"
+        }
+    }
+    
+    @classmethod
+    def get_client(cls, environment=None):
+        """Get client for specified environment."""
+        env = environment or os.getenv("CLUSTER_ENV", "dev")
+        config = cls.CONFIGS[env]
+        return get_client(**config)
+
+# Usage
+client = ClusterConfig.get_client("prod")
+```
+
+### Pattern 2: Client Factory
+
+```python
+from ocp_resources.resource import get_client
+from typing import Optional
+import kubernetes
+
+class ClientFactory:
+    """Factory for creating configured clients."""
+    
+    _instances = {}
+    
+    @classmethod
+    def create(cls, name: str, **kwargs) -> kubernetes.dynamic.DynamicClient:
+        """Create or get cached client."""
+        if name not in cls._instances:
+            cls._instances[name] = get_client(**kwargs)
+        return cls._instances[name]
+    
+    @classmethod
+    def get(cls, name: str) -> Optional[kubernetes.dynamic.DynamicClient]:
+        """Get cached client."""
+        return cls._instances.get(name)
+    
+    @classmethod
+    def clear(cls, name: Optional[str] = None):
+        """Clear cached client(s)."""
+        if name:
+            cls._instances.pop(name, None)
+        else:
+            cls._instances.clear()
+
+# Usage
+# Create clients
+prod_client = ClientFactory.create(
+    "prod",
+    context="production"
+)
+
+dev_client = ClientFactory.create(
+    "dev",
+    context="development"
+)
+
+# Reuse clients
+same_prod_client = ClientFactory.get("prod")
+
+# Clear when done
+ClientFactory.clear("dev")
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Resource Class" icon="cube" href="/core-concepts/resources">
+    Learn about the base Resource class
+  </Card>
+  <Card title="Working with Pods" icon="key" href="/guides/working-with-pods">
+    Execute commands and retrieve logs
+  </Card>
+  <Card title="Testing Guide" icon="flask" href="/advanced/testing">
+    Test your code with the fake client
+  </Card>
+  <Card title="Fake Client" icon="shield" href="/advanced/fake-client">
+    Test without a real Kubernetes cluster
+  </Card>
+</CardGroup>

@@ -1,0 +1,257 @@
+---
+title: 'Route'
+description: 'OpenShift Route resource for exposing services externally'
+---
+
+## Overview
+
+The `Route` class represents an OpenShift Route object, which exposes a service at a host name so that external clients can reach it by name. Routes are OpenShift-specific resources that provide advanced features like TLS termination, load balancing, and custom routing.
+
+**Source:** `ocp_resources/route.py:5`
+
+## Class Definition
+
+```python
+from ocp_resources.route import Route
+
+class Route(NamespacedResource):
+    api_group = NamespacedResource.ApiGroup.ROUTE_OPENSHIFT_IO
+```
+
+## Constructor
+
+```python
+Route(
+    name=None,
+    namespace=None,
+    client=None,
+    service=None,
+    destination_ca_cert=None,
+    teardown=True,
+    yaml_file=None,
+    delete_timeout=TIMEOUT_4MINUTES,
+    **kwargs
+)
+```
+
+### Parameters
+
+<ParamField path="name" type="str" default="None">
+  Name of the Route resource. If not provided, it must be specified in the YAML file.
+</ParamField>
+
+<ParamField path="namespace" type="str" default="None">
+  Namespace where the Route will be created. Required for namespaced resources.
+</ParamField>
+
+<ParamField path="client" type="DynamicClient" default="None">
+  Kubernetes dynamic client for API communication. If not provided, the default client will be used.
+</ParamField>
+
+<ParamField path="service" type="str" default="None">
+  Name of the Service to expose through this Route. This creates a route targeting the specified service.
+</ParamField>
+
+<ParamField path="destination_ca_cert" type="str" default="None">
+  CA certificate for TLS re-encrypt termination. When provided, the route will be configured with re-encrypt TLS termination.
+</ParamField>
+
+<ParamField path="teardown" type="bool" default="True">
+  If True, the resource will be automatically deleted when used as a context manager.
+</ParamField>
+
+<ParamField path="yaml_file" type="str" default="None">
+  Path to a YAML file containing the Route definition. If provided, the Route will be created from this file.
+</ParamField>
+
+<ParamField path="delete_timeout" type="int" default="TIMEOUT_4MINUTES">
+  Timeout in seconds for delete operations. Defaults to 4 minutes.
+</ParamField>
+
+<ParamField path="**kwargs" type="Any">
+  Additional keyword arguments passed to the parent `NamespacedResource` class. Common options include `label` and `annotations`.
+</ParamField>
+
+## Properties
+
+### exposed_service
+
+```python
+@property
+def exposed_service(self) -> str
+```
+
+Returns the name of the service that the route is exposing.
+
+**Source:** `ocp_resources/route.py:48`
+
+**Returns:** Service name as a string
+
+### host
+
+```python
+@property
+def host(self) -> str
+```
+
+Returns the hostname that is exposing the service externally.
+
+**Source:** `ocp_resources/route.py:55`
+
+**Returns:** Host name as a string
+
+### ca_cert
+
+```python
+@property
+def ca_cert(self) -> str
+```
+
+Returns the destination CA certificate used for TLS termination.
+
+**Source:** `ocp_resources/route.py:62`
+
+**Returns:** CA certificate as a string
+
+### termination
+
+```python
+@property
+def termination(self) -> str
+```
+
+Returns the TLS termination type for a secured route (e.g., "edge", "passthrough", "reencrypt").
+
+**Source:** `ocp_resources/route.py:69`
+
+**Returns:** Termination type as a string
+
+## Usage Examples
+
+### Basic Route Creation
+
+Create a simple route that exposes a service:
+
+```python
+from ocp_resources.route import Route
+
+route = Route(
+    name="my-app-route",
+    namespace="default",
+    service="my-app-service"
+)
+route.deploy()
+
+print(f"Route exposed at: {route.host}")
+```
+
+### Secure Route with TLS Re-encryption
+
+Create a route with re-encrypt TLS termination:
+
+```python
+from ocp_resources.route import Route
+
+ca_certificate = """-----BEGIN CERTIFICATE-----
+MIIC...
+-----END CERTIFICATE-----"""
+
+route = Route(
+    name="secure-app-route",
+    namespace="default",
+    service="secure-app-service",
+    destination_ca_cert=ca_certificate
+)
+route.deploy()
+
+print(f"Secure route: {route.host}")
+print(f"TLS termination: {route.termination}")
+```
+
+### Using Context Manager
+
+Automatically clean up the route after use:
+
+```python
+from ocp_resources.route import Route
+
+with Route(
+    name="temp-route",
+    namespace="default",
+    service="temp-service"
+) as route:
+    print(f"Temporary route created: {route.host}")
+    # Route is automatically deleted when exiting the context
+```
+
+### Creating from YAML
+
+Create a route from a YAML file:
+
+```python
+from ocp_resources.route import Route
+
+route = Route(
+    namespace="default",
+    yaml_file="route-definition.yaml"
+)
+route.deploy()
+```
+
+### Accessing Route Properties
+
+Query route properties after creation:
+
+```python
+from ocp_resources.route import Route
+
+route = Route(
+    name="my-route",
+    namespace="default"
+)
+
+if route.exists:
+    print(f"Exposed service: {route.exposed_service}")
+    print(f"External host: {route.host}")
+    if hasattr(route.instance.spec, 'tls'):
+        print(f"TLS termination: {route.termination}")
+        print(f"CA certificate: {route.ca_cert}")
+```
+
+## OpenShift-Specific Features
+
+### Route Types
+
+- **Unsecured Routes**: Basic HTTP routes without TLS
+- **Edge Termination**: TLS terminates at the router, traffic to backend is HTTP
+- **Passthrough Termination**: Encrypted traffic passes through to the backend
+- **Re-encrypt Termination**: TLS terminates at router, re-encrypts to backend
+
+### Wildcard Routes
+
+Routes support wildcard subdomains for multi-tenant applications:
+
+```yaml
+spec:
+  host: "*.apps.example.com"
+```
+
+### Route Annotations
+
+Common annotations for route behavior:
+
+- `haproxy.router.openshift.io/timeout`: Set custom timeout
+- `haproxy.router.openshift.io/rate-limit-connections`: Rate limiting
+- `haproxy.router.openshift.io/balance`: Load balancing algorithm
+
+## Related Resources
+
+- [Service](/api-reference/service) - Backend service exposed by the route
+- [Ingress](/api-reference/ingress) - Kubernetes standard ingress resource
+- [OpenShift Routes Documentation](https://docs.openshift.com/container-platform/latest/networking/routes/route-configuration.html)
+
+## See Also
+
+- [Working with Routes Guide](/guides/working-with-routes)
+- [Core Concepts: Resources](/core-concepts/resources)
+- [NamespacedResource Base Class](/api-reference/namespaced-resource)
